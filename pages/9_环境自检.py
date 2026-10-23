@@ -17,12 +17,17 @@ left, right = st.columns([1.15, 1])
 with left:
     st.subheader("配置读取结果")
 
-    if config.configured:
+    if config.state == "ok":
         st.success(f"已读到密钥，来源：{config.source}")
-    elif config.api_key:
-        st.warning(f"读到了密钥但格式不对，来源：{config.source}")
+    elif config.state == "placeholder":
+        st.warning(f"文件找到了（{config.source}），但里面还是模板原文，密钥没填进去。")
+    elif config.state == "invalid":
+        st.warning(
+            f"密钥只有 {len(config.api_key.strip())} 位，疑似复制不全。"
+            "正常的 DeepSeek 密钥是 sk- 开头的一长串。"
+        )
     else:
-        st.error(f"没有读到密钥（查找位置：Streamlit Secrets、.env、环境变量）")
+        st.error("没有读到密钥（查找位置：Streamlit Secrets、.env、环境变量）")
 
     st.dataframe(
         [

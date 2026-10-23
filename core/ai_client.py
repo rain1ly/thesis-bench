@@ -29,10 +29,25 @@ class AIConfig:
     source: str  # 从哪读到的，便于排查
 
     @property
-    def configured(self) -> bool:
-        """密钥形态是否像真的。不验证有效性，只做格式下限判断。"""
+    def state(self) -> str:
+        """missing / placeholder / invalid / ok。
+
+        分成四态而不是一个布尔，是因为「没读到」「读到了但还是模板原文」
+        「格式不像密钥」对应的处理办法完全不同，混成一句话会让人白折腾。
+        """
         k = self.api_key.strip()
-        return k.startswith("sk-") and len(k) >= 20 and "在这里" not in k
+        if not k:
+            return "missing"
+        if "在这里" in k or not k.startswith("sk-"):
+            return "placeholder"
+        if len(k) < 20:
+            return "invalid"
+        return "ok"
+
+    @property
+    def configured(self) -> bool:
+        """密钥形态是否像真的。只做格式判断，不验证有效性。"""
+        return self.state == "ok"
 
     @property
     def masked_key(self) -> str:
