@@ -7,7 +7,9 @@ __pycache__/
 .env.local
 .streamlit/secrets.toml
 
-data/app.db
+# 数据库不入库：里面有学生的真实提问，属个人数据
+data/*.db
+*.db
 data/raw/
 
 .vscode/
