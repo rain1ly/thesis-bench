@@ -20,7 +20,8 @@ from core.schemas import DocProfile, Issue
 
 REF_HEADS = ("参考文献", "参考资料", "文献目录")
 REF_ITEM_RE = re.compile(r"^\[(\d+)\]")
-REF_CITE_RE = re.compile(r"\[(\d+)\]")
+# 支持 [1]、[1,2]、[1-3]、[1，2] 四种写法，中文论文里都常见
+REF_CITE_RE = re.compile(r"\[(\d+(?:\s*[,，\-–—]\s*\d+)*)\]")
 
 FIG_RE = re.compile(r"图\s*(\d+[-–—.]\d+)")
 TAB_RE = re.compile(r"表\s*(\d+[-–—.]\d+)")
@@ -41,7 +42,40 @@ def _fmt_nums(numbers, prefix: str) -> str:
 
 
 # ---------------------------------------------------------------- 1 文献引用
+def _expand_cite(raw: str) -> set[int]:
+    """把 "[1]"、"[1,2]"、"[1-3]" 展开成编号集合。
+
+    两个防御，都是被真实样本逼出来的：
+    1. 文献编号从 1 开始，[0] 不可能是引用；
+    2. "[0,1]" 是「归一化到 [0,1] 区间」这种数学记号，
+       不能当成引用了第 0 条和第 1 条文献。
+    """
+    if raw.strip().startswith("0"):
+        return set()
+
+    out: set[int] = set()
+    for part in re.split(r"[,，]", raw):
+        part = part.strip()
+        m = re.match(r"^(\d+)\s*[-–—]\s*(\d+)$", part)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            # b - a < 50 是防御：[999-1] 这类笔误不该展开成上千个编号
+            if 0 < a <= b and b - a < 50:
+                out.update(range(a, b + 1))
+            continue
+        if part.isdigit() and int(part) > 0:
+            out.add(int(part))
+    return out
+
+
 def check_citation_coverage(profile: DocProfile) -> list[Issue]:
+    """文献引用双向核对。
+
+    只查一个方向等于睁一只眼：
+      正向：列在文献表里，正文从未引用  → 疑似凑数
+      反向：正文引用了，文献表里没有    → 疑似编造或编号错乱
+    两个方向对学生都是答辩现场会被直接追问的问题。
+    """
     texts = profile.texts
 
     ref_start = None
@@ -62,32 +96,54 @@ def check_citation_coverage(profile: DocProfile) -> list[Issue]:
         return []
 
     body = "\n".join(texts[:ref_start])
-    cited = {int(x) for x in REF_CITE_RE.findall(body)}
+    cited: set[int] = set()
+    for raw in REF_CITE_RE.findall(body):
+        cited |= _expand_cite(raw)
 
-    missing = sorted(listed - cited)
-    if not missing:
-        return []
+    issues: list[Issue] = []
 
-    if not cited:
-        return [
+    # ── 反向：引用了不存在的条目
+    dangling = sorted(cited - listed)
+    if dangling:
+        marks = "、".join(f"[{n}]" for n in dangling)
+        issues.append(
             Issue(
                 category="引用",
                 severity="严重",
-                location="全文",
-                message=f"列出 {len(listed)} 条参考文献，正文中一处都没有引用",
-                evidence="文献列表与正文完全脱节，答辩时会被直接问到「你引用的这些文献用在哪了」",
+                location="正文",
+                message=f"正文引用了 {marks}，但参考文献表中没有对应条目",
+                evidence=(
+                    f"文献表共 {len(listed)} 条，编号范围 [{min(listed)}]–[{max(listed)}]。"
+                    "答辩时被要求当场指出出处，答不上来就是硬伤"
+                ),
             )
-        ]
-
-    return [
-        Issue(
-            category="引用",
-            severity="严重",
-            location="参考文献",
-            message=f"第 {'、'.join(str(n) for n in missing)} 条文献在正文中未被引用",
-            evidence=f"共 {len(listed)} 条文献，正文引用了 {len(cited)} 条",
         )
-    ]
+
+    # ── 正向：列了但没引用
+    missing = sorted(listed - cited)
+    if missing:
+        if not cited:
+            issues.append(
+                Issue(
+                    category="引用",
+                    severity="严重",
+                    location="全文",
+                    message=f"列出 {len(listed)} 条参考文献，正文中一处都没有引用",
+                    evidence="文献列表与正文完全脱节，答辩时会被直接问到「你引用的这些文献用在哪了」",
+                )
+            )
+        else:
+            issues.append(
+                Issue(
+                    category="引用",
+                    severity="严重",
+                    location="参考文献",
+                    message=f"第 {'、'.join(str(n) for n in missing)} 条文献在正文中未被引用",
+                    evidence=f"共 {len(listed)} 条文献，正文引用了 {len(cited)} 条",
+                )
+            )
+
+    return issues
 
 
 # ---------------------------------------------------------------- 2 图表悬空

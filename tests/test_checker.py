@@ -14,8 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from core.checker import run_all, summary
+from core.checker import check_citation_coverage, run_all, summary
 from core.parser import parse_docx
+from core.schemas import DocProfile, Paragraph
 
 SAMPLES = Path(__file__).resolve().parent.parent / "data" / "samples"
 
@@ -96,3 +97,51 @@ def test_summary_counts():
     s = summary(run_all(load("数据库")))
     assert s["total"] == s["severe"] + s["warning"]
     assert s["total"] > 0
+
+
+# ---------------------------------------------------------------- 引用双向核对
+# 用合成文档而非真实样本：这两个方向要精确控制编号，样本里造不出来
+def build(cites: str, ref_count: int):
+    """最小文档：一句带引用的正文 + 参考文献表。"""
+    paras = [Paragraph(index=0, text=cites), Paragraph(index=1, text="参考文献")]
+    for i in range(1, ref_count + 1):
+        paras.append(Paragraph(index=i + 1, text=f"[{i}] 某某. 相关研究[J]. 2024."))
+    return DocProfile(filename="synthetic.docx", paragraphs=paras)
+
+
+def test_dangling_citation_detected():
+    """正文引用 [12]，但文献表只有 11 条 —— 反向缺口。"""
+    issues = check_citation_coverage(build("已有研究[12]表明这一点。", 11))
+    assert any("没有对应条目" in i.message for i in issues)
+
+
+def test_dangling_citation_range():
+    """[1-4] 要展开成 1,2,3,4，其中 4 号不存在。"""
+    issues = check_citation_coverage(build("已有研究[1-4]表明。", 3))
+    hit = [i for i in issues if "没有对应条目" in i.message]
+    assert hit and "[4]" in hit[0].message
+    assert "[1]" not in hit[0].message  # 1-3 是存在的，不该误报
+
+
+def test_unused_references_detected():
+    """文献表 5 条，正文只引用 1-3 —— 正向缺口。"""
+    issues = check_citation_coverage(build("已有研究[1][2][3]表明。", 5))
+    hit = [i for i in issues if "未被引用" in i.message]
+    assert hit and "4" in hit[0].message and "5" in hit[0].message
+
+
+def test_citation_clean_when_both_directions_ok():
+    """区间引用 [1-3] 恰好覆盖 3 条文献，两个方向都没有缺口。"""
+    assert check_citation_coverage(build("已有研究[1-3]表明。", 3)) == []
+
+
+def test_math_interval_not_treated_as_citation():
+    """「归一化到 [0,1] 区间」是数学记号，不能当成引用了第 0 条文献。"""
+    issues = check_citation_coverage(build("各特征归一化到[0,1]区间后输入模型。", 3))
+    assert not any("没有对应条目" in i.message for i in issues)
+
+
+def test_zero_never_reported_as_dangling():
+    """文献编号从 1 开始，[0] 不该出现在任何报告里。"""
+    issues = check_citation_coverage(build("如文献[0]所述。", 3))
+    assert not any("[0]" in i.message for i in issues)
