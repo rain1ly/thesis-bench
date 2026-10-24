@@ -135,13 +135,62 @@ def ping(config: AIConfig, timeout: float = 40.0) -> tuple[bool, str]:
         reply = (resp.choices[0].message.content or "").strip()
         return True, f"模型已回话：{reply[:40]}"
     except Exception as exc:  # noqa: BLE001 - 上层需要展示原因，不该白屏
-        msg = str(exc)
-        if "401" in msg or "Authentication" in msg or "invalid_api_key" in msg:
-            return False, "密钥无效或已过期（401）。"
-        if "402" in msg or "Insufficient Balance" in msg or "余额" in msg:
-            return False, "账户余额不足（402），需要充值。"
-        if "404" in msg or "model_not_found" in msg:
-            return False, f"模型 {config.model} 不存在，检查 OPENAI_MODEL 拼写。"
-        if "timeout" in msg.lower() or "timed out" in msg.lower():
-            return False, "请求超时，检查网络或 BASE_URL。"
-        return False, f"调用失败：{msg[:160]}"
+        return False, _explain(exc, config.model)
+
+
+def _explain(exc: Exception, model: str) -> str:
+    """把 SDK 的英文异常翻译成能照着处理的一句话。
+
+    这层看着啰嗦，实际决定用户会不会在同一类错误上反复折腾：
+    「401」和「402」到了界面上都是"调用失败"，但处理办法完全不同。
+    """
+    msg = str(exc)
+    low = msg.lower()
+    if "401" in msg or "Authentication" in msg or "invalid_api_key" in msg:
+        return "密钥无效或已过期（401）。"
+    if "402" in msg or "Insufficient Balance" in msg or "余额" in msg:
+        return "账户余额不足（402），需要充值。"
+    if "404" in msg or "model_not_found" in msg:
+        return f"模型 {model} 不存在，检查 OPENAI_MODEL 拼写。"
+    if "429" in msg or "rate limit" in low:
+        return "触发限流（429），等几十秒再试。"
+    if "timeout" in low or "timed out" in low:
+        return "请求超时，检查网络或 BASE_URL。"
+    return f"调用失败：{msg[:160]}"
+
+
+def chat(
+    config: AIConfig,
+    system: str,
+    user: str,
+    max_tokens: int = 900,
+    temperature: float = 0.3,
+    timeout: float = 60.0,
+) -> tuple[bool, str]:
+    """通用对话入口，返回 (是否成功, 文本或错误说明)。
+
+    业务层只看第一个返回值就够了，不必自己写 try/except ——
+    失败时第二个值已经是可直接显示给用户的中文原因。
+    """
+    if not config.configured:
+        return False, "密钥未配置，无法生成。"
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return False, "缺少 openai 依赖。"
+
+    try:
+        client = OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=timeout)
+        resp = client.chat.completions.create(
+            model=config.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return True, (resp.choices[0].message.content or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        return False, _explain(exc, config.model)
