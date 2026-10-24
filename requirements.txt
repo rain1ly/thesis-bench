@@ -1,8 +1,10 @@
-streamlit>=1.40
-pandas>=2.2
+streamlit>=1.40,<2.0
+pandas>=2.2,<4.0
 python-docx>=1.1
-pdfplumber>=0.11
-pydantic>=2.9
 openai>=1.50
 python-dotenv>=1.0
 pytest>=8.0
+
+# 暂不安装：只在计划中用到，装了会把云端首次构建拖长几十秒
+# pdfplumber>=0.11   PDF 论文解析（当前只支持 .docx）
+# pydantic>=2.9      LLM 结构化输出校验（当前规则层不需要）

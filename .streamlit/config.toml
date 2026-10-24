@@ -1,0 +1,22 @@
+# Streamlit 运行配置 —— 本地与云端共用
+# 注意：[client] showErrorDetails 开发期留 "full"，方便看堆栈；
+#       答辩/提交前改成 false，避免评委看到英文 traceback。
+
+[theme]
+base = "light"
+primaryColor = "#185FA5"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1EFE8"
+textColor = "#2C2C2A"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = "full"
+
+[server]
+headless = true
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false
