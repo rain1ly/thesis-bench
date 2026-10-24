@@ -16,16 +16,19 @@ st.set_page_config(page_title="论文工坊", layout="wide", initial_sidebar_sta
 
 with st.sidebar:
     st.markdown("### 论文工坊")
-    st.caption("ThesisBench · 学位论文预评审")
+    st.caption("ThesisBench · 导学协同，不是又一个查重系统")
     st.divider()
-    st.markdown("**已上线**")
-    st.markdown("- 写作台 · 结构与规范检查")
-    st.markdown("**规划中**")
-    st.markdown("- 预评审台 · 六维评分、答辩押题")
+    st.markdown("**一条链**")
+    st.markdown("1. 答疑台 · 提问沉淀")
+    st.markdown("2. 写作台 · 结构诊断")
+    st.markdown("3. 预演台 · 答辩预演")
+    st.divider()
+    st.markdown("**辅助**")
+    st.markdown("- 预评审台 · 问题清单汇总")
     st.markdown("- 风险看板 · 导师视角")
-    st.markdown("- 版本对比 · 改没改好")
+    st.markdown("- 环境自检 · 密钥与连通性")
     st.divider()
-    st.caption("当前检查全部基于规则，不调用模型")
+    st.caption("写作台检查全部基于规则，不调用模型")
 
 st.title("写作台")
 st.caption("在论文交给导师、走上答辩台之前，先按导师和评委的标准挑一遍毛病")
@@ -69,7 +72,7 @@ if issues:
             for i in issues
         ]
     )
-    st.dataframe(df, use_container_width=True, hide_index=True, height=min(420, 56 + 36 * len(df)))
+    st.dataframe(df, width="stretch", hide_index=True, height=min(420, 56 + 36 * len(df)))
 else:
     st.success("没有发现结构性问题。")
 
@@ -93,7 +96,7 @@ if profile.sections:
                 for s in profile.sections
             ]
         )
-        st.dataframe(detail, use_container_width=True, hide_index=True)
+        st.dataframe(detail, width="stretch", hide_index=True)
 
 st.divider()
 st.caption(f"文件：{profile.filename}　|　检查项：文献引用、图表悬空、章节结构、标题承诺")
