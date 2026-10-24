@@ -59,30 +59,42 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-浏览器打开 `http://localhost:8501`，上传 `data/samples/` 里的任何一份 docx。
+浏览器打开 `http://localhost:8501`。
+
+第一次打开时答疑库会自动载入 30 条示例数据（虚构学生，页面会标明来源），
+所以不用先做任何准备工作就能看到完整流程。清空入口在首页。
 
 ## 目录结构
 
 ```
-app.py                      写作台：上传 → 检查 → 问题清单
-pages/1_预评审台.py          规则检查汇总视图
-pages/2_风险看板.py          导师视角
-pages/3_答疑台.py            ① 答疑：学生提问 / 导师审核 / 记录与画像
-pages/4_预演台.py            ③ 预演：风险画像 / 出题 / 作答自评 / 复盘轨迹
+app.py                      总览：三层链条状态 + 闭环说明 + 数据来源与清空
+pages/1_答疑台.py            ① 答疑：学生提问 / 导师审核 / 记录与画像
+pages/2_写作台.py            ② 诊断：上传 docx → 问题清单 → 章节字数分布
+pages/3_预演台.py            ③ 预演：风险画像 / 出题 / 作答自评 / 复盘轨迹
 pages/9_环境自检.py          密钥四态诊断与连通性测试
 core/schemas.py             数据模型，不含逻辑
 core/parser.py              docx → 章节树 + 元信息
 core/checker.py             ② 规则检查，确定性，不调模型
-core/qa_store.py            答疑 SQLite 存储 + 重复问题检测（bigram 重叠系数）
+core/qa_store.py            答疑 SQLite 存储 + 重复问题检测（bigram 重叠系数）+ meta 标记
 core/qa_seed.py             30 条模拟答疑（4 条学生线，幂等载入）
 core/rehearsal.py           ③ 风险画像 / 题库 / 出题 / 要点覆盖判分，纯确定性
 core/rehearsal_store.py     预演记录 SQLite 存储，重答留痕
+core/bootstrap.py           启动自愈：空库自动载入示例，并保证清空后不会自己长回来
 core/ai_client.py           模型封装：三变量配置、错误分类、密钥脱敏
 data/samples/               测试样本
-tests/                      47 条回归测试
+tests/                      58 条回归测试
 ```
 
 依赖方向单向：`app / pages → core`，core 内部不反向依赖界面。
+
+## 两个工程上的取舍
+
+**空库自动长出来。** `qa.db` 不进仓库（含学生提问，不能公开）。评委 clone 下来
+或云端容器重启后库是空的，主打功能就成了空页面。所以启动时自动载入示例，
+并打 `meta.demo` 标记 —— 标出来源，才能既诚实又能安全清空。
+
+**清空之后不许自己长回来。** 用户点过「清空」就写 `demo_off` 开关，之后不再自动载入。
+清空按钮按下去刷新又回来，等于当众承认 bug。
 
 ## 检查项
 

@@ -23,11 +23,14 @@ import time
 import pandas as pd
 import streamlit as st
 
-from core import qa_store, rehearsal, rehearsal_store
+from core import bootstrap, qa_store, rehearsal, rehearsal_store
 from core.ai_client import chat, load_config
+
+bootstrap.ensure_demo()
 
 st.title("预演台")
 st.caption("答辩前，先用你自己问过的问题考一遍自己 —— 出题依据是答疑记录，不是通用题库")
+bootstrap.demo_notice()
 
 SYSTEM_FOLLOWUP = """你是答辩现场的评委，正在听这名学生回答你提的问题。
 

@@ -9,12 +9,15 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core import qa_store
+from core import bootstrap, qa_store
 from core.ai_client import chat, load_config
 from core.qa_store import STAGES, STATUSES
 
+bootstrap.ensure_demo()
+
 st.title("答疑台")
 st.caption("把「学生问、导师答」的过程沉淀下来：重复问题不必答第二遍，薄弱点会自己浮出来")
+bootstrap.demo_notice()
 
 SYSTEM_PROMPT = """你是高校毕业论文指导助手，为导师起草答复草稿，不替导师做决定。
 

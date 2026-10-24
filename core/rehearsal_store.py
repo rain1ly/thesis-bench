@@ -160,3 +160,15 @@ def improvement(student: str, question: str, db_path: str | Path | None = None) 
     """单题的作答轨迹，按时间正序 —— 用来看「改没改好」。"""
     rows = [a for a in list_attempts(student=student, db_path=db_path) if a.question == question]
     return list(reversed(rows))
+
+
+def clear_all(db_path: str | Path | None = None) -> int:
+    """清空预演记录。
+
+    答疑数据一清，这里的 source_ids 就全指向不存在的记录，
+    所以两者必须一起清 —— 由 core.bootstrap 负责成对调用。
+    """
+    with session(db_path) as conn:
+        n = conn.execute("SELECT COUNT(*) AS c FROM rehearsal").fetchone()["c"]
+        conn.execute("DELETE FROM rehearsal")
+        return int(n)

@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS qa (
 );
 CREATE INDEX IF NOT EXISTS idx_qa_student ON qa(student);
 CREATE INDEX IF NOT EXISTS idx_qa_status  ON qa(status);
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -159,6 +163,40 @@ def stats(db_path: str | Path | None = None) -> dict:
         "已通过": by_status.get("已通过", 0),
         "已退回": by_status.get("已退回", 0),
     }
+
+
+# ---------------------------------------------------------------- 元信息与清空
+def set_meta(key: str, value: str, db_path: str | Path | None = None) -> None:
+    """键值表，只存「这份库是什么」这类事实，不当业务数据用。
+
+    目前只有一个键：demo=1，表示库里是示例数据而不是真实学生记录。
+    分不清真假数据，演示时就没法诚实地标注来源。
+    """
+    with session(db_path) as conn:
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+
+def get_meta(key: str, default: str = "", db_path: str | Path | None = None) -> str:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def clear_all(db_path: str | Path | None = None) -> int:
+    """删空答疑表，返回删除条数。
+
+    这里不加保护条件 —— 判断「能不能删」是业务层的事（见 core.bootstrap），
+    存储层只负责把事做干净，别在这里藏规则。
+    """
+    with session(db_path) as conn:
+        n = conn.execute("SELECT COUNT(*) AS c FROM qa").fetchone()["c"]
+        conn.execute("DELETE FROM qa")
+        conn.execute("DELETE FROM meta")
+        return int(n)
 
 
 # ---------------------------------------------------------------- 重复问题检测

@@ -224,4 +224,13 @@ def load_seed(db_path=None) -> int:
                     created if status == "已通过" else "",
                 ),
             )
+    # 打标记：以后要能一眼分清「这库是示例数据还是真实学生记录」。
+    # 不分清就没法诚实标注来源，也没法安全地一键清空。
+    qa_store.set_meta("demo", "1", db_path)
+    qa_store.set_meta("demo_off", "0", db_path)
     return len(SEED)
+
+
+def seed_students() -> set[str]:
+    """示例数据里出现过的学生名 —— 用来识别「这是不是演示库」。"""
+    return {row[0] for row in SEED}
