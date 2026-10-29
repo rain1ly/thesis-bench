@@ -13,7 +13,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from core import bootstrap, qa_store, rehearsal, rehearsal_store
+from core import bootstrap, identity, qa_store, rehearsal, rehearsal_store
 
 ROOT = Path(__file__).resolve().parent
 
@@ -47,18 +47,17 @@ st.caption(
     "维普那类系统管的是交上去之后合不合规 —— 两件事，不重叠。"
 )
 
+actor = identity.render_switcher()
+
 # st.rerun 会丢掉本轮的提示消息，所以先存再显示 —— 否则点完清空什么反馈都没有
 flash = st.session_state.pop("home_flash", None)
 if flash:
     st.success(flash)
 
-bootstrap.demo_notice(expanded=True)
-
 qa = qa_store.stats()
 if qa["total"] == 0:
     st.warning(
-        "答疑库现在是空的。想要演示数据，去「答疑台」→ 记录与画像 → 点「载入示例数据」；"
-        "要录真实问题，直接在答疑台提问即可。"
+        "答疑库现在是空的。想要演示数据，去「答疑台」→ 载入示例数据；要录真实问题，直接提问即可。"
     )
 
 reh = rehearsal_store.stats()
@@ -67,16 +66,20 @@ high_risks = [t for t in risks if t.level == "高"]
 n_files, n_issues, n_severe = sample_stat()
 
 st.markdown("### 一条链，三层")
-st.caption("不是三个并列功能：上一层的产出是下一层的输入。")
+st.caption("不是三个并列功能：上一层的产出是下一层的输入。侧边栏可切换学生 / 老师身份。")
 
 c1, c2, c3 = st.columns(3, gap="medium")
 
 with c1:
     with st.container(border=True):
         st.markdown("**① 答疑台**")
-        st.metric("答疑记录", qa["total"], f"{qa['待审核']} 条待审核", delta_color="inverse")
-        st.caption("学生问 → AI 起草 → 导师审核 → 入库。重复问题不必答第二遍，薄弱点自己浮出来。")
-        st.page_link("pages/1_答疑台.py", label="进入答疑台 →")
+        st.metric("答疑记录", qa["total"], f"{qa['待审核']} 条待处理", delta_color="inverse")
+        st.caption(
+            "提问时先定三件事：问题分类、问谁（导师 / 指定老师 / 公开池）、公开还是隐私。"
+            "AI 起草，老师改完才入库。"
+        )
+        st.page_link("pages/1_答疑台.py", label="学生提问 →")
+        st.page_link("pages/2_老师端.py", label="老师待办 →")
 
 with c2:
     with st.container(border=True):
@@ -86,7 +89,7 @@ with c2:
             f"4 类规则检查（文献双向引用 / 图表悬空 / 章节结构 / 标题承诺），"
             f"用仓库里 {n_files} 份真实样本跑出的数字。不调模型，结果可复现。"
         )
-        st.page_link("pages/2_写作台.py", label="进入写作台 →")
+        st.page_link("pages/3_写作台.py", label="进入写作台 →")
 
 with c3:
     with st.container(border=True):
@@ -98,10 +101,10 @@ with c3:
             delta_color="inverse",
         )
         st.caption(
-            "用学生自己问过的问题出题 —— 这是维普拿不到的数据。"
+            "按学生问过的问题出题 —— 这是维普拿不到的数据。"
             "只报要点覆盖，不打分；AI 只当评委追问，不当裁判。"
         )
-        st.page_link("pages/3_预演台.py", label="进入预演台 →")
+        st.page_link("pages/4_预演台.py", label="进入预演台 →")
 
 st.divider()
 
@@ -141,3 +144,5 @@ with st.expander("数据来源与清空"):
         st.markdown("当前库**不是示例数据**，不提供一键清空。真实学生记录只能手工处理。")
 
 st.caption("环境自检（密钥与模型连通性）在左侧「环境自检」页。")
+if bootstrap.is_demo():
+    st.caption("当前为示例数据 · 30 条模拟答疑（虚构学生，非真实访谈）· 清空入口在上方折叠区")

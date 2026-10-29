@@ -202,17 +202,75 @@ SEED: list[tuple[str, str, str, str, str, str, str]] = [
 ]
 
 
+# ── 学生档案：论文题目 + 指导老师。导师反馈第一条要求的字段。
+#    没有它，老师端看不到题目，预演台在学生只问过格式问题时也无题可出。
+SEED_STUDENTS = [
+    ("陈同学", "智能温室监控系统感知层设计与数据预处理", "张老师", "物联网工程"),
+    ("李同学", "基于 Spring Boot 的图书管理系统设计与实现", "刘老师", "软件工程"),
+    ("王同学", "多模型融合的短期电力负荷预测方法对比研究", "张老师", "电气工程"),
+    ("赵同学", "大学生在线学习投入度影响因素研究", "刘老师", "教育学"),
+]
+
+SEED_TEACHERS = [("张老师", "副教授"), ("刘老师", "讲师")]
+
+# 标签 → 问题分类。答辩老师判断"该谁接"靠这个，不是靠感觉。
+TAG_CATEGORY = {
+    "数据来源": "数据分析",
+    "数据处理": "数据分析",
+    "问卷方法": "数据分析",
+    "实验设计": "论文写作",
+    "图表规范": "格式规范",
+    "格式": "格式规范",
+    "查重": "格式规范",
+    "文献规范": "论文写作",
+    "结构安排": "论文写作",
+    "写作": "论文写作",
+    "选题范围": "论文写作",
+    "技术选型": "代码实现",
+    "测试": "代码实现",
+    "答辩准备": "其他",
+}
+
+# 这几条设成隐私：学生特意不想让同学看见的那类问题（数据不放心、英文文献读不懂）。
+PRIVATE_HINTS = ("我数据这块还是不太放心", "英文文献")
+# 这几条留在公开池：任何老师都能接，用来演示"公开给所有老师"这条路径。
+PUBLIC_POOL_HINTS = ("样本量只有 300 条", "答辩 PPT 要几页", "消融实验必须做吗", "查重前要不要删掉引用")
+
+
+def _classify(question: str, tags: str) -> tuple[str, str]:
+    """按问题文本决定可见性，按标签决定分类。"""
+    visibility = "隐私" if any(h in question for h in PRIVATE_HINTS) else "公开"
+    return TAG_CATEGORY.get(tags, "其他"), visibility
+
+
 def load_seed(db_path=None) -> int:
     """只在空库时写入，避免重复点击把数据灌成两倍。"""
     if qa_store.stats(db_path)["total"] > 0:
         return 0
 
+    advisor_of = {row[0]: row[2] for row in SEED_STUDENTS}
+    thesis_of = {row[0]: row[1] for row in SEED_STUDENTS}
+
+    for name, title, advisor, major in SEED_STUDENTS:
+        qa_store.upsert_student(name, title, advisor, major, db_path=db_path)
+    for name, title in SEED_TEACHERS:
+        qa_store.upsert_teacher(name, title, db_path=db_path)
+
     with session(db_path) as conn:
         for student, stage, question, answer, status, tags, created in SEED:
+            category, visibility = _classify(question, tags)
+            # 隐私必须指定老师 —— 否则谁都看不见，学生的问题就沉底了
+            if visibility == "隐私":
+                assigned = advisor_of.get(student, "")
+            elif any(h in question for h in PUBLIC_POOL_HINTS):
+                assigned = ""  # 公开池
+            else:
+                assigned = advisor_of.get(student, "")
             conn.execute(
                 "INSERT INTO qa (student, stage, question, ai_draft, answer, status, tags,"
-                " reviewer_note, created_at, reviewed_at)"
-                " VALUES (?, ?, ?, '', ?, ?, ?, '', ?, ?)",
+                " reviewer_note, created_at, reviewed_at, category, visibility,"
+                " assigned_to, thesis_title)"
+                " VALUES (?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, ?, ?, ?)",
                 (
                     student,
                     stage,
@@ -222,6 +280,10 @@ def load_seed(db_path=None) -> int:
                     tags,
                     created,
                     created if status == "已通过" else "",
+                    category,
+                    visibility,
+                    assigned,
+                    thesis_of.get(student, ""),
                 ),
             )
     # 打标记：以后要能一眼分清「这库是示例数据还是真实学生记录」。

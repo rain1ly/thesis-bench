@@ -21,8 +21,9 @@ sys.path.insert(0, str(ROOT))
 PAGES = [
     "app.py",
     "pages/1_答疑台.py",
-    "pages/2_写作台.py",
-    "pages/3_预演台.py",
+    "pages/2_老师端.py",
+    "pages/3_写作台.py",
+    "pages/4_预演台.py",
     "pages/9_环境自检.py",
 ]
 
@@ -43,12 +44,28 @@ def run_tests() -> bool:
 
 
 def run_pages() -> bool:
+    """以 app.py 为入口逐个切换页面。
+
+    不能直接 AppTest.from_file("pages/xxx.py")：st.page_link 的路径是相对**主脚本**
+    解析的，从页面文件起步会把 "pages/1_答疑台.py" 解析成 pages/pages/…，
+    体检脚本就会天天误报"页面找不到"。真实运行时入口永远是 app.py，按真实路径测。
+    """
     print("2/3 渲染页面 …")
     from streamlit.testing.v1 import AppTest
 
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=90)
+    at.run()
+
     all_ok = True
-    for page in PAGES:
-        at = AppTest.from_file(str(ROOT / page), default_timeout=90)
+    errs = [str(e.value) for e in at.exception]
+    if errs:
+        all_ok = False
+        print(f" {BAD} app.py: {errs[0][:120]}")
+    else:
+        print(f" {OK} app.py")
+
+    for page in PAGES[1:]:
+        at.switch_page(page)
         at.run()
         errs = [str(e.value) for e in at.exception]
         if errs:

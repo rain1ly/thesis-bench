@@ -22,6 +22,9 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "qa.db"
 STAGES = ("开题", "中期", "定稿")
 STATUSES = ("待审核", "已通过", "已退回")
 
+CATEGORIES = ("论文写作", "数据分析", "代码实现", "系统使用", "格式规范", "其他")
+VISIBILITIES = ("公开", "隐私")
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS qa (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,15 +37,47 @@ CREATE TABLE IF NOT EXISTS qa (
     tags          TEXT NOT NULL DEFAULT '',
     reviewer_note TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL,
-    reviewed_at   TEXT NOT NULL DEFAULT ''
+    reviewed_at   TEXT NOT NULL DEFAULT '',
+    category      TEXT NOT NULL DEFAULT '论文写作',
+    visibility    TEXT NOT NULL DEFAULT '公开',
+    assigned_to   TEXT NOT NULL DEFAULT '',
+    thesis_title  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_qa_student ON qa(student);
 CREATE INDEX IF NOT EXISTS idx_qa_status  ON qa(status);
+CREATE TABLE IF NOT EXISTS students (
+    name         TEXT PRIMARY KEY,
+    thesis_title TEXT NOT NULL DEFAULT '',
+    advisor      TEXT NOT NULL DEFAULT '',
+    major        TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS teachers (
+    name       TEXT PRIMARY KEY,
+    title      TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
 );
 """
+
+# 老库补列：加用户体系之前建的 qa 表没有这四列，直接 ALTER 会报错，
+# 所以先查 PRAGMA 缺哪补哪。迁移必须幂等 —— 应用每次启动都会走到这里。
+MIGRATE_COLUMNS = (
+    ("category", "TEXT NOT NULL DEFAULT '论文写作'"),
+    ("visibility", "TEXT NOT NULL DEFAULT '公开'"),
+    ("assigned_to", "TEXT NOT NULL DEFAULT ''"),
+    ("thesis_title", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    have = {row["name"] for row in conn.execute("PRAGMA table_info(qa)")}
+    for name, ddl in MIGRATE_COLUMNS:
+        if name not in have:
+            conn.execute(f"ALTER TABLE qa ADD COLUMN {name} {ddl}")
 
 
 @dataclass
@@ -58,6 +93,10 @@ class QARecord:
     reviewer_note: str
     created_at: str
     reviewed_at: str
+    category: str = "论文写作"
+    visibility: str = "公开"
+    assigned_to: str = ""
+    thesis_title: str = ""
 
     @property
     def final_answer(self) -> str:
@@ -67,6 +106,17 @@ class QARecord:
     @property
     def answered(self) -> bool:
         return self.status == "已通过" and bool(self.final_answer)
+
+    @property
+    def is_private(self) -> bool:
+        return self.visibility == "隐私"
+
+    @property
+    def audience(self) -> str:
+        """给界面看的一句话：这条问题归谁管。"""
+        if self.assigned_to:
+            return f"指定 {self.assigned_to}"
+        return "公开池（任何老师可接）"
 
 
 def _now() -> str:
@@ -82,6 +132,7 @@ def session(db_path: str | Path | None = None):
     conn.row_factory = sqlite3.Row
     try:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         yield conn
         conn.commit()
     finally:
@@ -94,13 +145,33 @@ def add_question(
     stage: str = "开题",
     ai_draft: str = "",
     tags: str = "",
+    category: str = "论文写作",
+    visibility: str = "公开",
+    assigned_to: str = "",
+    thesis_title: str = "",
     db_path: str | Path | None = None,
 ) -> int:
+    if visibility not in VISIBILITIES:
+        raise ValueError(f"未知可见性：{visibility}")
+    if category not in CATEGORIES:
+        raise ValueError(f"未知分类：{category}")
     with session(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO qa (student, stage, question, ai_draft, tags, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (student.strip(), stage, question.strip(), ai_draft, tags, _now()),
+            "INSERT INTO qa (student, stage, question, ai_draft, tags, category,"
+            " visibility, assigned_to, thesis_title, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                student.strip(),
+                stage,
+                question.strip(),
+                ai_draft,
+                tags,
+                category,
+                visibility,
+                assigned_to.strip(),
+                thesis_title.strip(),
+                _now(),
+            ),
         )
         return int(cur.lastrowid)
 
@@ -125,6 +196,9 @@ def list_records(
     student: str | None = None,
     status: str | None = None,
     keyword: str | None = None,
+    category: str | None = None,
+    visibility: str | None = None,
+    assigned_to: str | None = None,
     db_path: str | Path | None = None,
 ) -> list[QARecord]:
     sql = "SELECT * FROM qa WHERE 1=1"
@@ -135,6 +209,15 @@ def list_records(
     if status:
         sql += " AND status = ?"
         args.append(status)
+    if category:
+        sql += " AND category = ?"
+        args.append(category)
+    if visibility:
+        sql += " AND visibility = ?"
+        args.append(visibility)
+    if assigned_to:
+        sql += " AND assigned_to = ?"
+        args.append(assigned_to)
     if keyword:
         sql += " AND (question LIKE ? OR answer LIKE ? OR ai_draft LIKE ? OR tags LIKE ?)"
         args.extend([f"%{keyword}%"] * 4)
@@ -163,6 +246,80 @@ def stats(db_path: str | Path | None = None) -> dict:
         "已通过": by_status.get("已通过", 0),
         "已退回": by_status.get("已退回", 0),
     }
+
+
+# ---------------------------------------------------------------- 学生与教师档案
+def upsert_student(
+    name: str,
+    thesis_title: str = "",
+    advisor: str = "",
+    major: str = "",
+    db_path: str | Path | None = None,
+) -> None:
+    """学生档案。论文题目和指导老师是导师反馈里第一条要补的东西。
+
+    没有它，「老师那边看不到论文题目」；也没有它，预演台在学生
+    只问过一句格式问题时无题可出。
+    """
+    with session(db_path) as conn:
+        conn.execute(
+            "INSERT INTO students (name, thesis_title, advisor, major, created_at)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(name) DO UPDATE SET thesis_title = excluded.thesis_title,"
+            " advisor = excluded.advisor, major = excluded.major",
+            (name.strip(), thesis_title.strip(), advisor.strip(), major.strip(), _now()),
+        )
+
+
+def get_student(name: str, db_path: str | Path | None = None) -> dict:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT * FROM students WHERE name = ?", (name,)).fetchone()
+    return dict(row) if row else {}
+
+
+def all_students(db_path: str | Path | None = None) -> list[dict]:
+    """学生档案，按指导老师、姓名排。没建档的学生不在这个列表里 —— 用 names() 兜底。"""
+    with session(db_path) as conn:
+        rows = conn.execute("SELECT * FROM students ORDER BY advisor, name").fetchall()
+    return [dict(r) for r in rows]
+
+
+def thesis_of(name: str, db_path: str | Path | None = None) -> str:
+    return get_student(name, db_path).get("thesis_title", "")
+
+
+def upsert_teacher(name: str, title: str = "", db_path: str | Path | None = None) -> None:
+    with session(db_path) as conn:
+        conn.execute(
+            "INSERT INTO teachers (name, title, created_at) VALUES (?, ?, ?)"
+            " ON CONFLICT(name) DO UPDATE SET title = excluded.title",
+            (name.strip(), title.strip(), _now()),
+        )
+
+
+def all_teachers(db_path: str | Path | None = None) -> list[dict]:
+    with session(db_path) as conn:
+        rows = conn.execute("SELECT * FROM teachers ORDER BY name").fetchall()
+    return [dict(r) for r in rows]
+
+
+def teacher_names(db_path: str | Path | None = None) -> list[str]:
+    return [t["name"] for t in all_teachers(db_path)]
+
+
+def student_names(db_path: str | Path | None = None) -> list[str]:
+    """档案里有的 + 只在答疑记录里出现过的，合并去重。
+
+    先有记录后建档是常态（学生先提问，档案后补），
+    只读 students 表会漏人。
+    """
+    seen: list[str] = []
+    for row in all_students(db_path):
+        seen.append(row["name"])
+    for name in students(db_path):
+        if name not in seen:
+            seen.append(name)
+    return seen
 
 
 # ---------------------------------------------------------------- 元信息与清空

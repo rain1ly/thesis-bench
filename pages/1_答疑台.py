@@ -1,23 +1,24 @@
-"""答疑台 —— 本作品的第一个核心模块。
+"""答疑台 —— 学生视角。
 
-立场先说清楚：**AI 只起草，不裁决。**
-任何 AI 产出都标为「待审核」，导师点通过或退回之后才算数。
-学术判断不能交给模型，这一点在设计上就锁死，不靠自觉。
+导师 10-29 的反馈把这一页从"一个提问框"改成了三件事必须先说清：
+**这是谁的问题、问谁、谁能看见。**
+
+原来只有"学生名 + 阶段 + 问题"，于是老师那边看不到论文题目，
+也不知道该不该自己接；学生的困惑还可能被全班看见。
+现在提问前先定三样东西：问题分类、问谁、公开还是隐私。
+
+一条安全边界写在代码里：**查重只在自己的记录里查。**
+拿全班记录去比对近似问题，等于用"相似度 62%"把别人的隐私问题漏出来。
 """
+
 from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
 
-from core import bootstrap, qa_store
+from core import bootstrap, identity, qa_store
 from core.ai_client import chat, load_config
-from core.qa_store import STAGES, STATUSES
-
-bootstrap.ensure_demo()
-
-st.title("答疑台")
-st.caption("把「学生问、导师答」的过程沉淀下来：重复问题不必答第二遍，薄弱点会自己浮出来")
-bootstrap.demo_notice()
+from core.qa_store import CATEGORIES, STAGES
 
 SYSTEM_PROMPT = """你是高校毕业论文指导助手，为导师起草答复草稿，不替导师做决定。
 
@@ -26,31 +27,86 @@ SYSTEM_PROMPT = """你是高校毕业论文指导助手，为导师起草答复�
 2. 给可执行的具体建议，禁止「加强研究」「多读文献」这类空话
 3. 涉及研究设计、数据可得性、结论可靠性的判断，明确写「这一点需要导师确认」
 4. 200 字以内
-5. 不代写论文正文，只给方向和方法"""
+5. 不代写论文正文，只给方向和方法
+6. 如果给了论文题目和问题分类，回答要贴着这个题目来，不要泛泛而谈"""
 
 
-def build_prompt(student: str, stage: str, question: str, similar) -> str:
-    lines = [f"学生：{student}", f"阶段：{stage}", f"问题：{question}"]
+def build_prompt(thesis: str, student: str, stage: str, category: str, question: str, similar) -> str:
+    lines = []
+    if thesis:
+        lines.append(f"论文题目：{thesis}")
+    lines += [f"学生：{student}", f"阶段：{stage}", f"问题分类：{category}", f"问题：{question}"]
     if similar:
-        lines.append("")
-        lines.append("历史相关答疑（可参考，避免重复）：")
+        lines += ["", "历史相关答疑（避免重复，可在此基础上补充）："]
         for _score, r in similar:
             lines.append(f"- 问：{r.question}")
             lines.append(f"  答：{r.final_answer or '（尚未答复）'}")
     return "\n".join(lines)
 
 
-flash = st.session_state.pop("qa_flash", None)
-if flash:
-    st.success(flash)
+bootstrap.ensure_demo()
+actor = identity.render_switcher()
 
-tab_ask, tab_review, tab_records = st.tabs(["学生提问", "导师审核", "记录与画像"])
+st.title("答疑台")
+st.caption("提问前先定三件事：属于哪类问题、问哪位老师、给谁看")
 
-# ------------------------------------------------------------------ 学生提问
+if actor.is_teacher:
+    st.info("当前是老师身份。老师端的待办、学生名单和沉淀库在「老师端」页。")
+    st.page_link("pages/2_老师端.py", label="去老师端 →")
+    st.stop()
+
+profile = qa_store.get_student(actor.name)
+thesis = profile.get("thesis_title", "")
+advisor = profile.get("advisor", "")
+
+with st.container(border=True):
+    c1, c2 = st.columns([2, 1])
+    c1.markdown(f"**论文题目**　{thesis or '（还没填，老师看不到你的题目）'}")
+    c2.caption(f"指导老师　{advisor or '未分配'}")
+
+    with st.expander("修改论文题目 / 指导老师"):
+        st.caption("题目改了记得更新 —— 预演台按题目出题，老师也靠它认你的论文。")
+        f1, f2 = st.columns([3, 1])
+        new_title = f1.text_input("论文题目", value=thesis, key="prof_title")
+        teachers = identity.teacher_names()
+        new_adv = f2.selectbox(
+            "指导老师",
+            teachers,
+            index=teachers.index(advisor) if advisor in teachers else 0,
+            key="prof_adv",
+        )
+        if st.button("保存档案", key="prof_save"):
+            qa_store.upsert_student(actor.name, new_title, new_adv, profile.get("major", ""))
+            st.success("已保存。")
+            st.rerun()
+
+tab_ask, tab_mine, tab_open = st.tabs(["我要提问", "我的问题", "公开问答"])
+
+# ------------------------------------------------------------------ 提问
 with tab_ask:
-    c1, c2 = st.columns([1.4, 1])
-    student = c1.text_input("学生（姓名或学号）", key="q_student", placeholder="例如：陈同学 / 20220101")
-    stage = c2.selectbox("所处阶段", STAGES, key="q_stage")
+    c1, c2 = st.columns(2)
+    stage = c1.selectbox("所处阶段", STAGES, key="q_stage")
+    category = c2.selectbox("问题分类", CATEGORIES, key="q_cat")
+
+    visibility = st.radio(
+        "可见性",
+        ["公开", "隐私"],
+        horizontal=True,
+        key="q_vis",
+        help="隐私问题仅你与接手的老师可见，不会进入公开问答区，也不会被其他同学看到。",
+    )
+
+    route_options = [f"我的指导老师（{advisor or '未分配'}）", "指定其他老师"]
+    if visibility == "公开":
+        route_options.append("公开给所有老师（谁先看到谁接）")
+    route = st.radio("问谁", route_options, key="q_route")
+
+    target_teacher = advisor
+    if route == "指定其他老师":
+        others = [t for t in identity.teacher_names() if t != advisor] or identity.teacher_names()
+        target_teacher = st.selectbox("选择老师", others, key="q_teacher_pick")
+    elif route.startswith("公开给所有老师"):
+        target_teacher = ""
 
     question = st.text_area(
         "你的问题",
@@ -59,156 +115,114 @@ with tab_ask:
         placeholder="例如：我的问卷只回收了 62 份，够不够做因子分析？",
     )
 
-    # 边写边查：这是「重复问题不必答第二遍」的入口
+    # 查重只在自己问过的问题里找 —— 不能拿别人的隐私记录当参照物
     similar: list = []
     if question.strip():
-        similar = qa_store.find_similar(question, qa_store.list_records())
+        mine = qa_store.list_records(student=actor.name)
+        similar = qa_store.find_similar(question, mine)
         if similar:
-            st.warning(f"这个问题历史上问过 {len(similar)} 次，先看有没有现成答案：")
+            st.warning(f"这个问题你自己问过 {len(similar)} 次，先看有没有现成答案：")
             for score, r in similar:
-                head = f"{r.student} · {r.stage} · {r.question[:34]}（相似 {score:.0%}）"
-                with st.expander(head):
-                    if r.final_answer:
-                        st.markdown(f"**答复**：{r.final_answer}")
-                        st.caption(f"状态：{r.status} · {r.created_at}")
-                    else:
-                        st.info("这条还挂着，暂时没有答复。")
+                with st.expander(f"{r.stage} · {r.question[:34]}（相似 {score:.0%}）"):
+                    st.markdown(f"**答复**：{r.final_answer}" if r.final_answer else "这条还挂着，暂时没有答复。")
+                    st.caption(f"状态：{r.status} · {r.created_at}")
 
     cfg = load_config()
     if not cfg.configured:
         st.caption("未配置模型密钥：提交后只做记录，导师需手动撰写答复。")
 
-    if st.button("提交问题", type="primary", disabled=not (student.strip() and question.strip())):
+    if st.button("提交问题", type="primary", disabled=not question.strip()):
         draft, warn = "", ""
         if cfg.configured:
             with st.spinner("正在起草答复草稿…"):
-                ok, text = chat(cfg, SYSTEM_PROMPT, build_prompt(student, stage, question, similar))
+                ok, text = chat(
+                    cfg,
+                    SYSTEM_PROMPT,
+                    build_prompt(thesis, actor.name, stage, category, question, similar),
+                )
             if ok:
                 draft = text
             else:
                 warn = f"AI 起草失败：{text}（问题已记录，导师可手动答复）"
 
         rid = qa_store.add_question(
-            student=student,
+            student=actor.name,
             question=question,
             stage=stage,
             ai_draft=draft,
             tags="、".join(sorted({r.tags for _s, r in similar if r.tags})[:2]),
+            category=category,
+            visibility=visibility,
+            assigned_to=target_teacher,
+            thesis_title=thesis,
         )
-        msg = f"已提交，编号 #{rid}。" + ("已生成草稿，等待导师审核。" if draft else "已进入待审核队列。")
+        where = f"已派给 {target_teacher}" if target_teacher else "已放进公开池，任何老师都能接"
+        msg = f"已提交，编号 #{rid}，{where}。" + ("已生成草稿，等待老师审核。" if draft else "")
         if warn:
             msg += f" {warn}"
         st.session_state["qa_flash"] = msg
         st.rerun()
 
-# ------------------------------------------------------------------ 导师审核
-with tab_review:
-    pending = qa_store.list_records(status="待审核")
-    if not pending:
-        st.info("没有待审核的问题。学生提交后会出现在这里。")
+# ------------------------------------------------------------------ 我的问题
+with tab_mine:
+    flash = st.session_state.pop("qa_flash", None)
+    if flash:
+        st.success(flash)
 
-    for r in pending:
-        title = f"#{r.id} · {r.student} · {r.stage} · {r.question[:30]}"
-        with st.expander(title, expanded=len(pending) == 1):
-            st.markdown(f"**学生提问**　{r.question}")
-            st.caption(f"提交于 {r.created_at}" + (f"　·　AI 已起草" if r.ai_draft else "　·　无 AI 草稿"))
+    rows = qa_store.list_records(student=actor.name)
+    if not rows:
+        st.info("你还没有提过问题。")
+        if qa_store.stats()["total"] == 0:
+            st.caption("库里一条数据都没有。可以先载入一批示例，把流程跑起来。")
+            if st.button("载入示例数据（30 条）", type="primary", key="load_seed_btn"):
+                from core.qa_seed import load_seed
 
-            answer = st.text_area(
-                "答复（可直接修改 AI 草稿）",
-                value=r.final_answer,
-                height=150,
-                key=f"ans_{r.id}",
-            )
-            note = st.text_input("审核备注（可选，学生可见）", key=f"note_{r.id}")
-
-            b1, b2, _ = st.columns([1, 1, 2])
-            if b1.button("通过", key=f"ok_{r.id}", type="primary"):
-                qa_store.review(r.id, "已通过", answer=answer, note=note)
-                st.session_state["qa_flash"] = f"#{r.id} 已通过，答复已入库。"
+                n = load_seed()
+                st.session_state["qa_flash"] = f"已载入 {n} 条示例答疑记录。"
                 st.rerun()
-            if b2.button("退回重问", key=f"back_{r.id}"):
-                qa_store.review(r.id, "已退回", answer=answer, note=note)
-                st.session_state["qa_flash"] = f"#{r.id} 已退回。"
-                st.rerun()
-
-    done = qa_store.list_records(status="已通过")
-    if done:
-        with st.expander(f"已通过 {len(done)} 条（点开查看）"):
-            for r in done[:20]:
-                st.markdown(f"**#{r.id}** {r.student} · {r.stage}｜{r.question}")
-                st.markdown(f"> {r.final_answer}")
-                st.divider()
-
-# ------------------------------------------------------------------ 记录与画像
-with tab_records:
-    s = qa_store.stats()
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("记录总数", s["total"])
-    m2.metric("学生数", s["students"])
-    m3.metric("待审核", s["待审核"])
-    m4.metric("已通过", s["已通过"])
-
-    if s["total"] == 0:
-        st.info("还没有任何答疑记录。可以先载入一批示例数据，把流程跑起来。")
-        if st.button("载入示例数据（30 条）", type="primary"):
-            from core.qa_seed import load_seed
-
-            n = load_seed()
-            st.session_state["qa_flash"] = f"已载入 {n} 条示例答疑记录。"
-            st.rerun()
-        st.stop()
-
-    st.divider()
-    f1, f2, f3 = st.columns(3)
-    pick_student = f1.selectbox("学生", ["全部"] + qa_store.students())
-    pick_status = f2.selectbox("状态", ["全部", *STATUSES])
-    keyword = f3.text_input("关键词", placeholder="例如：数据 / 问卷 / 图表")
-
-    records = qa_store.list_records(
-        student=None if pick_student == "全部" else pick_student,
-        status=None if pick_status == "全部" else pick_status,
-        keyword=keyword.strip() or None,
-    )
-
-    if not records:
-        st.info("没有符合条件的记录。")
     else:
+        done = sum(1 for r in rows if r.answered)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("提问总数", len(rows))
+        m2.metric("已答复", done)
+        m3.metric("还在等", len(rows) - done)
+
+        for r in rows[:20]:
+            icon = "隐私" if r.is_private else "公开"
+            with st.expander(f"#{r.id} · {r.category} · {icon} · {r.question[:30]}"):
+                st.markdown(f"**问题**　{r.question}")
+                st.caption(f"{r.stage} · {r.audience} · 提交于 {r.created_at}")
+                if r.final_answer:
+                    st.markdown(f"**答复**　{r.final_answer}")
+                    if r.reviewer_note:
+                        st.caption(f"老师备注：{r.reviewer_note}")
+                else:
+                    st.warning("还没有答复。")
+                st.caption(f"状态：{r.status}")
+
+# ------------------------------------------------------------------ 公开问答
+with tab_open:
+    st.caption("全班已通过的公开问答。隐私问题不会出现在这里。")
+    pool = [r for r in qa_store.list_records(status="已通过") if r.visibility == "公开"]
+    if not pool:
+        st.info("还没有公开的问答沉淀。")
+    else:
+        cats = ["全部"] + sorted({r.category for r in pool})
+        pick = st.selectbox("按分类筛选", cats, key="open_cat")
+        shown = [r for r in pool if pick == "全部" or r.category == pick]
         st.dataframe(
             pd.DataFrame(
                 [
                     {
-                        "编号": r.id,
-                        "学生": r.student,
-                        "阶段": r.stage,
+                        "分类": r.category,
                         "问题": r.question[:46],
-                        "状态": r.status,
-                        "答复": (r.final_answer or "")[:46] or "—",
-                        "提交时间": r.created_at,
+                        "答复": r.final_answer[:46],
+                        "提问者": r.student,
+                        "时间": r.created_at,
                     }
-                    for r in records
+                    for r in shown
                 ]
             ),
             hide_index=True,
             width="stretch",
         )
-
-    st.divider()
-    st.subheader("学生问题画像")
-    st.caption("论文里看不出谁卡住了，但提问记录可以。这张表就是「预演台」的出题依据。")
-
-    rows = []
-    for name in qa_store.students():
-        rs = qa_store.list_records(student=name)
-        solved = sum(1 for r in rs if r.answered)
-        unanswered = sum(1 for r in rs if not r.final_answer)
-        rows.append(
-            {
-                "学生": name,
-                "提问数": len(rs),
-                "已答复": solved,
-                "未答复": unanswered,
-                "最近提问": rs[0].created_at if rs else "",
-                "风险": "高" if unanswered >= 3 else ("中" if unanswered >= 1 else "低"),
-            }
-        )
-    st.dataframe(pd.DataFrame(rows).sort_values("未答复", ascending=False), hide_index=True, width="stretch")
