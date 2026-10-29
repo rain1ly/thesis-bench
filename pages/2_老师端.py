@@ -16,12 +16,18 @@ import pandas as pd
 import streamlit as st
 
 from core import bootstrap, identity, qa_store
+from ui import components, theme
 
+theme.inject()
 bootstrap.ensure_demo()
 actor = identity.render_switcher()
 
-st.title("老师端")
-st.caption("先看谁在等我，再看谁卡住了，最后才是已经答过的")
+components.hero(
+    "① 答疑台 · 老师端",
+    "先看谁在等我，再看谁卡住了",
+    "待办按「点名找我的 → 公开池」排序，隐私问题优先；我的学生一栏能看到每个人的论文题目和卡了几次。",
+    metas=[(f"当前身份　{actor.label}", "brand")],
+)
 
 if not actor.is_teacher:
     st.info("当前是学生身份。老师端的待办与名单需要切到「老师」身份查看。")
@@ -32,11 +38,12 @@ records = qa_store.list_records()
 inbox = identity.inbox(records, actor.name)
 pool = identity.public_pool(records)
 
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("待我处理", len(inbox), f"{sum(1 for r in inbox if r.is_private)} 条隐私", delta_color="inverse")
-m2.metric("公开池", len(pool), "任何老师可接", delta_color="off")
-m3.metric("我的学生", len(identity.my_students(actor.name, records)))
-m4.metric("已沉淀", sum(1 for r in records if r.answered and r.visibility == "公开"))
+components.kpi([
+    ("待我处理", len(inbox), f"{sum(1 for r in inbox if r.is_private)} 条隐私", "mid" if inbox else "default"),
+    ("公开池", len(pool), "任何老师可接", "default"),
+    ("我的学生", len(identity.my_students(actor.name, records)), "我是指导老师", "default"),
+    ("已沉淀", sum(1 for r in records if r.answered and r.visibility == "公开"), "公开问答", "good"),
+])
 
 tab_todo, tab_students, tab_archive = st.tabs(["待办", "我的学生", "沉淀库"])
 

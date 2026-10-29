@@ -25,11 +25,16 @@ import streamlit as st
 
 from core import bootstrap, qa_store, rehearsal, rehearsal_store
 from core.ai_client import chat, load_config
+from ui import components, theme
 
+theme.inject()
 bootstrap.ensure_demo()
 
-st.title("预演台")
-st.caption("答辩前，先用你自己问过的问题考一遍自己 —— 出题依据是答疑记录，不是通用题库")
+components.hero(
+    "③ 预演台",
+    "答辩前，先用自己问过的问题考一遍自己",
+    "出题依据是答疑记录，不是通用题库。只报要点覆盖、不打分；答题前不给要点 —— 那是答案。",
+)
 bootstrap.demo_notice()
 
 SYSTEM_FOLLOWUP = """你是答辩现场的评委，正在听这名学生回答你提的问题。
@@ -71,11 +76,12 @@ profile = rehearsal.build_profile(records)
 stat = rehearsal_store.stats(student=student)
 high = sum(1 for t in profile if t.level == "高")
 
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("答疑记录", len(records))
-m2.metric("涉及主题", len(profile), f"{high} 个高风险", delta_color="inverse")
-m3.metric("预演题数", stat["questions"])
-m4.metric("要点覆盖", f"{stat['coverage']:.0%}" if stat["points_total"] else "—")
+components.kpi([
+    ("答疑记录", len(records), "这名学生的困惑史", "default"),
+    ("涉及主题", len(profile), f"{high} 个高风险", "high" if high else "default"),
+    ("预演题数", stat["questions"], "已作答过的题", "default"),
+    ("要点覆盖", f"{stat['coverage']:.0%}" if stat["points_total"] else "—", "按最近一次作答", "good" if stat["coverage"] >= 0.8 else "default"),
+])
 
 with st.expander("风险画像 · 这张表就是出题依据"):
     st.dataframe(

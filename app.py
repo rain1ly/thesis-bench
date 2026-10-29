@@ -14,10 +14,12 @@ from pathlib import Path
 import streamlit as st
 
 from core import bootstrap, identity, qa_store, rehearsal, rehearsal_store
+from ui import components, theme
 
 ROOT = Path(__file__).resolve().parent
 
-st.set_page_config(page_title="论文工坊 · ThesisBench", layout="wide")
+st.set_page_config(page_title="论文工坊 · ThesisBench", layout="wide", page_icon="◧")
+theme.inject()
 
 # 空库自动长出来：云端容器重启、评委刚 clone，都不该看到空页面
 bootstrap.ensure_demo()
@@ -41,13 +43,15 @@ def sample_stat() -> tuple[int, int, int]:
     return files, total, severe
 
 
-st.title("论文工坊 · ThesisBench")
-st.caption(
-    "管「写出来之前卡在哪、能不能过答辩」。"
-    "维普那类系统管的是交上去之后合不合规 —— 两件事，不重叠。"
-)
-
 actor = identity.render_switcher()
+
+is_demo = bootstrap.is_demo()
+components.hero(
+    "ThesisBench · 导学协同",
+    "论文工坊",
+    "管「写出来之前卡在哪、能不能过答辩」。维普那类系统管的是交上去之后合不合规 —— 两件事，不重叠。",
+    metas=[(f"当前身份　{actor.label}", "brand"), ("示例数据" if is_demo else "自建数据", "neutral")],
+)
 
 # st.rerun 会丢掉本轮的提示消息，所以先存再显示 —— 否则点完清空什么反馈都没有
 flash = st.session_state.pop("home_flash", None)
@@ -56,74 +60,88 @@ if flash:
 
 qa = qa_store.stats()
 if qa["total"] == 0:
-    st.warning(
-        "答疑库现在是空的。想要演示数据，去「答疑台」→ 载入示例数据；要录真实问题，直接提问即可。"
-    )
+    components.empty("答疑库是空的", "去「答疑台」载入示例数据，或直接以学生身份提第一个问题。")
 
+all_records = qa_store.list_records()
 reh = rehearsal_store.stats()
-risks = rehearsal.build_profile(qa_store.list_records())
-high_risks = [t for t in risks if t.level == "高"]
+risks = rehearsal.build_profile(all_records)
+high_risks = sum(1 for t in risks if t.level == "高")
 n_files, n_issues, n_severe = sample_stat()
 
-st.markdown("### 一条链，三层")
-st.caption("不是三个并列功能：上一层的产出是下一层的输入。侧边栏可切换学生 / 老师身份。")
+# 指标跟着身份走：学生看自己的提问，老师看自己的待办
+if actor.is_teacher:
+    mine = identity.inbox(all_records, actor.name)
+    mine_label, mine_note, mine_value = "待我处理", "点名找我的 + 公开池", len(mine)
+else:
+    own = [r for r in all_records if r.student == actor.name]
+    mine_label, mine_note, mine_value = "我的提问", f"其中 {sum(1 for r in own if not r.final_answer)} 条还没答复", len(own)
+
+components.kpi(
+    [
+        ("答疑记录", qa["total"], f"{qa['待审核']} 条待处理 · {len({r.student for r in all_records})} 名学生", "default"),
+        (mine_label, mine_value, mine_note, "mid" if mine_value else "default"),
+        ("样本检出问题", n_issues, f"{n_severe} 项严重 · {n_files} 份样本", "high" if n_severe else "good"),
+        ("已预演题数", reh["questions"], f"{high_risks} 个高风险主题", "default"),
+    ]
+)
+
+components.section("一条链，三层", "上一层的产出是下一层的输入")
 
 c1, c2, c3 = st.columns(3, gap="medium")
 
 with c1:
     with st.container(border=True):
-        st.markdown("**① 答疑台**")
-        st.metric("答疑记录", qa["total"], f"{qa['待审核']} 条待处理", delta_color="inverse")
-        st.caption(
-            "提问时先定三件事：问题分类、问谁（导师 / 指定老师 / 公开池）、公开还是隐私。"
-            "AI 起草，老师改完才入库。"
-        )
+        components.card_head("① 答疑台", [("学生 / 老师两端", "brand")])
+        st.caption("提问时先定三件事：问题分类、问谁（导师 / 指定老师 / 公开池）、公开还是隐私。AI 起草，老师改完才入库。")
         st.page_link("pages/1_答疑台.py", label="学生提问 →")
         st.page_link("pages/2_老师端.py", label="老师待办 →")
 
 with c2:
     with st.container(border=True):
-        st.markdown("**② 写作台**")
-        st.metric("样本检出问题", n_issues, f"{n_severe} 项严重", delta_color="inverse")
+        components.card_head("② 写作台", [("规则检查", "neutral")])
         st.caption(
-            f"4 类规则检查（文献双向引用 / 图表悬空 / 章节结构 / 标题承诺），"
-            f"用仓库里 {n_files} 份真实样本跑出的数字。不调模型，结果可复现。"
+            f"4 类检查：文献双向引用、图表悬空、章节结构、标题承诺。"
+            f"用仓库里 {n_files} 份样本跑出 {n_issues} 项问题，不调模型，结果可复现。"
         )
-        st.page_link("pages/3_写作台.py", label="进入写作台 →")
+        st.page_link("pages/3_写作台.py", label="上传论文 →")
 
 with c3:
     with st.container(border=True):
-        st.markdown("**③ 预演台**")
-        st.metric(
-            "已预演题数",
-            reh["questions"],
-            f"{len(high_risks)} 个高风险主题",
-            delta_color="inverse",
-        )
-        st.caption(
-            "按学生问过的问题出题 —— 这是维普拿不到的数据。"
-            "只报要点覆盖，不打分；AI 只当评委追问，不当裁判。"
-        )
-        st.page_link("pages/4_预演台.py", label="进入预演台 →")
+        components.card_head("③ 预演台", [("用答疑史出题", "brand")])
+        st.caption("按学生问过的问题出题，这是维普拿不到的数据。只报要点覆盖，不打分；AI 只当评委追问。")
+        st.page_link("pages/4_预演台.py", label="开始预演 →")
 
 st.divider()
 
-left, right = st.columns([1.5, 1], gap="large")
+components.section("闭环怎么转的", "系统的价值不在一屏输出，在这条线越转越细")
+
+left, right = st.columns([1.45, 1], gap="medium")
 
 with left:
-    st.markdown("**闭环是怎么转的**")
-    st.markdown(
-        "答疑入库 → 总结出问题画像 → 画像驱动预演出题 → 答完发现缺口 → 带着新问题回去问。\n\n"
-        "转一圈，下一轮出题就更准一点。**系统的价值不在一屏输出，在这条线越转越细。**"
-    )
+    with st.container(border=True):
+        st.markdown(
+            """<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:13.5px;line-height:2.2">
+<span class="tb-badge b-brand">答疑入库</span><span style="color:#B6B2A8">→</span>
+<span class="tb-badge b-neutral">问题画像</span><span style="color:#B6B2A8">→</span>
+<span class="tb-badge b-neutral">预演出题</span><span style="color:#B6B2A8">→</span>
+<span class="tb-badge b-neutral">发现缺口</span><span style="color:#B6B2A8">→</span>
+<span class="tb-badge b-brand">带着新问题回去问</span>
+</div>""",
+            unsafe_allow_html=True,
+        )
+        st.caption("转一圈，下一轮出题就更准一点。这条线越转越细，而不是功能越堆越多。")
 
 with right:
-    st.markdown("**不做的事**")
-    st.markdown("不查重、不代写、不管流程。")
-    st.markdown("**AI 的位置**")
-    st.markdown("只起草，不裁决。答复草稿要导师点通过才入库。")
-
-st.divider()
+    with st.container(border=True):
+        components.card_head("边界", [("写清楚比藏起来好", "neutral")])
+        st.markdown(
+            "<div style='font-size:13.5px;line-height:1.9;color:var(--tb-ink-2)'>"
+            "<b style='color:var(--tb-ink)'>不做</b>　不查重、不代写、不管流程<br>"
+            "<b style='color:var(--tb-ink)'>AI 的位置</b>　只起草，不裁决<br>"
+            "<b style='color:var(--tb-ink)'>数据</b>　示例数据是模拟的，页面标明"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 with st.expander("数据来源与清空"):
     if bootstrap.is_demo():
@@ -143,6 +161,7 @@ with st.expander("数据来源与清空"):
     else:
         st.markdown("当前库**不是示例数据**，不提供一键清空。真实学生记录只能手工处理。")
 
-st.caption("环境自检（密钥与模型连通性）在左侧「环境自检」页。")
+_tail = "环境自检（密钥与模型连通性）在左侧「环境自检」页。"
 if bootstrap.is_demo():
-    st.caption("当前为示例数据 · 30 条模拟答疑（虚构学生，非真实访谈）· 清空入口在上方折叠区")
+    _tail += "　·　当前为示例数据：30 条模拟答疑，虚构学生，非真实访谈"
+st.caption(_tail)

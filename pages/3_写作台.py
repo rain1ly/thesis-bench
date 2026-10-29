@@ -11,11 +11,16 @@ import streamlit as st
 
 from core.checker import run_all, summary
 from core.parser import parse_docx
+from ui import components, theme
 
-st.set_page_config(page_title="写作台 · 论文工坊", layout="wide")
+st.set_page_config(page_title="写作台 · 论文工坊", layout="wide", page_icon="◧")
+theme.inject()
 
-st.title("写作台")
-st.caption("在论文交给导师、走上答辩台之前，先按导师和评委的标准挑一遍毛病")
+components.hero(
+    "② 写作台 · 规则诊断",
+    "先按评委的标准挑一遍毛病",
+    "四类确定性检查：文献双向引用、图表悬空、章节结构、标题承诺。同一份文档永远得到同一份清单，不调模型。",
+)
 
 uploaded = st.file_uploader("选择论文文件", type=["docx"], help="支持 .docx，样本见 data/samples/")
 
@@ -33,12 +38,12 @@ except Exception as exc:  # noqa: BLE001
 issues = run_all(profile)
 stat = summary(issues)
 
-m1, m2, m3, m4, m5 = st.columns(5)
-m1.metric("字数", f"{profile.char_count:,}")
-m2.metric("章节", len(profile.sections))
-m3.metric("图片", profile.image_count)
-m4.metric("表格", profile.table_count)
-m5.metric("问题", stat["total"], f"{stat['severe']} 项严重", delta_color="inverse")
+components.kpi([
+    ("字数", f"{profile.char_count:,}", "全文", "default"),
+    ("章节", len(profile.sections), "识别到的小节", "default"),
+    ("图片", profile.image_count, f"表格 {profile.table_count}", "default"),
+    ("检出问题", stat["total"], f"{stat['severe']} 项严重", "high" if stat["severe"] else "good"),
+])
 
 st.divider()
 

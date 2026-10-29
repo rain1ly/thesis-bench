@@ -19,6 +19,7 @@ import streamlit as st
 from core import bootstrap, identity, qa_store
 from core.ai_client import chat, load_config
 from core.qa_store import CATEGORIES, STAGES
+from ui import components, theme
 
 SYSTEM_PROMPT = """你是高校毕业论文指导助手，为导师起草答复草稿，不替导师做决定。
 
@@ -44,11 +45,16 @@ def build_prompt(thesis: str, student: str, stage: str, category: str, question:
     return "\n".join(lines)
 
 
+theme.inject()
 bootstrap.ensure_demo()
 actor = identity.render_switcher()
 
-st.title("答疑台")
-st.caption("提问前先定三件事：属于哪类问题、问哪位老师、给谁看")
+components.hero(
+    "① 答疑台 · 学生端",
+    "把问题问清楚，也把答案留下来",
+    "提问时先定三件事：属于哪类问题、问哪位老师、给谁看。老师改完你才看到定稿 —— 不是系统不给你答案，是答案需要有人负责。",
+    metas=[(f"当前身份　{actor.label}", "brand")],
+)
 
 if actor.is_teacher:
     st.info("当前是老师身份。老师端的待办、学生名单和沉淀库在「老师端」页。")

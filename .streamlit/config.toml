@@ -1,13 +1,14 @@
 # Streamlit 运行配置 —— 本地与云端共用
-# 注意：[client] showErrorDetails 开发期留 "full"，方便看堆栈；
-#       答辩/提交前改成 false，避免评委看到英文 traceback。
+# 注意：这里的颜色必须和 ui/theme.py 的 COLORS 保持一致。
+# 两处不一致时，Streamlit 内置组件（滑块、单选、进度）会用自己的主题色，
+# 自定义组件用 CSS 的色 —— 同一个页面上出现两种蓝，一眼就看得出是拼的。
 
 [theme]
 base = "light"
-primaryColor = "#185FA5"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F1EFE8"
-textColor = "#2C2C2A"
+primaryColor = "#1E4B8F"
+backgroundColor = "#FBFAF7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#14181F"
 font = "sans serif"
 
 [client]
