@@ -136,8 +136,16 @@ def render_switcher() -> Actor:
 
     为什么放侧边栏：它要跟着每一页走，但又不能占正文的注意力 ——
     演示时观众该看的是业务，不是"你正在扮演谁"。
+
+    **这里必须用 key 管状态，不能靠 index。**
+    无 key 的 selectbox 每轮 rerun 都按 index 重置一次值，而 index 又是从
+    session_state 里的名字算出来的 —— 两者互相喂，控件就被锁死了：
+    手动切换看着成功，下一次 rerun 又弹回去。加 key 之后 state 归控件自己管。
     """
     import streamlit as st
+
+    role_key = "actor_role_widget"
+    name_key = "actor_name_widget"
 
     with st.sidebar:
         st.divider()
@@ -145,15 +153,15 @@ def render_switcher() -> Actor:
         role = st.radio(
             "角色",
             ROLES,
-            index=0 if st.session_state.get("actor_role", "学生") == "学生" else 1,
             horizontal=True,
             label_visibility="collapsed",
-            key="actor_role_widget",
+            key=role_key,
         )
         pool = student_names() if role == "学生" else teacher_names()
-        prev = st.session_state.get("actor_name")
-        idx = pool.index(prev) if prev in pool else 0
-        name = st.selectbox("身份", pool, index=idx, label_visibility="collapsed")
+        # 切角色后名单会换（学生 ↔ 老师），旧值可能不在新名单里，先兜底再渲染
+        if st.session_state.get(name_key) not in pool:
+            st.session_state[name_key] = pool[0]
+        name = st.selectbox("身份", pool, key=name_key, label_visibility="collapsed")
         st.session_state["actor_role"] = role
         st.session_state["actor_name"] = name
         st.caption("演示版用身份切换代替登录；生产环境接学校统一认证。")

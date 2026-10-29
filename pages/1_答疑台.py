@@ -65,6 +65,10 @@ profile = qa_store.get_student(actor.name)
 thesis = profile.get("thesis_title", "")
 advisor = profile.get("advisor", "")
 
+_pf = st.session_state.pop("prof_flash", None)
+if _pf:
+    st.success(_pf)
+
 with st.container(border=True):
     c1, c2 = st.columns([2, 1])
     c1.markdown(f"**论文题目**　{thesis or '（还没填，老师看不到你的题目）'}")
@@ -72,19 +76,27 @@ with st.container(border=True):
 
     with st.expander("修改论文题目 / 指导老师"):
         st.caption("题目改了记得更新 —— 预演台按题目出题，老师也靠它认你的论文。")
-        f1, f2 = st.columns([3, 1])
-        new_title = f1.text_input("论文题目", value=thesis, key="prof_title")
+        # 控件 key 必须带上身份。无 key 时控件状态按位置复用，
+        # 切到别的学生会把上一个人的题目和导师带过来 —— 于是顶部只读值和下拉值
+        # 在同一屏给出两个答案，用户第一反应是"系统自相矛盾"。
         teachers = identity.teacher_names()
-        new_adv = f2.selectbox(
-            "指导老师",
-            teachers,
-            index=teachers.index(advisor) if advisor in teachers else 0,
-            key="prof_adv",
-        )
-        if st.button("保存档案", key="prof_save"):
-            qa_store.upsert_student(actor.name, new_title, new_adv, profile.get("major", ""))
-            st.success("已保存。")
-            st.rerun()
+        k_title = f"prof_title_{actor.name}"
+        k_adv = f"prof_adv_{actor.name}"
+        if st.session_state.get(k_adv) not in teachers:
+            st.session_state[k_adv] = advisor if advisor in teachers else teachers[0]
+        if k_title not in st.session_state:
+            st.session_state[k_title] = thesis
+
+        with st.form("profile_form"):
+            new_title = st.text_input("论文题目", key=k_title)
+            new_adv = st.selectbox("指导老师", teachers, key=k_adv)
+            if st.form_submit_button("保存档案", type="primary"):
+                qa_store.upsert_student(actor.name, new_title, new_adv, profile.get("major", ""))
+                # 保存后把这个学生的编辑态丢掉，下轮从库里重建，避免"改完还显示旧值"
+                st.session_state.pop(k_title, None)
+                st.session_state.pop(k_adv, None)
+                st.session_state["prof_flash"] = "档案已保存。"
+                st.rerun()
 
 tab_ask, tab_mine, tab_open = st.tabs(["我要提问", "我的问题", "公开问答"])
 
@@ -99,20 +111,28 @@ with tab_ask:
         ["公开", "隐私"],
         horizontal=True,
         key="q_vis",
-        help="隐私问题仅你与接手的老师可见，不会进入公开问答区，也不会被其他同学看到。",
+        help="隐私问题仅你与受理老师可见，不会进入公开问答区，也不会被其他同学看到。",
     )
 
-    route_options = [f"我的指导老师（{advisor or '未分配'}）", "指定其他老师"]
+    route_options = []
+    if advisor:
+        route_options.append(f"我的指导老师（{advisor}）")
+    route_options.append("指定其他老师")
     if visibility == "公开":
-        route_options.append("公开给所有老师（谁先看到谁接）")
-    route = st.radio("问谁", route_options, key="q_route")
+        route_options.append("公开给所有老师")
+    route = st.radio(
+        "答疑老师",
+        route_options,
+        key=f"q_route_{visibility}",
+        help="指定老师只交给这一位；公开则所有老师都能看到。",
+    )
 
-    target_teacher = advisor
-    if route == "指定其他老师":
+    target_teacher = ""
+    if route.startswith("我的指导老师"):
+        target_teacher = advisor
+    elif route == "指定其他老师":
         others = [t for t in identity.teacher_names() if t != advisor] or identity.teacher_names()
         target_teacher = st.selectbox("选择老师", others, key="q_teacher_pick")
-    elif route.startswith("公开给所有老师"):
-        target_teacher = ""
 
     question = st.text_area(
         "你的问题",
