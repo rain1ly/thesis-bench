@@ -25,7 +25,7 @@ from __future__ import annotations
 COLORS = {
     "ink": "#14181F",        # 主文字
     "ink_2": "#4A5160",      # 次要文字
-    "ink_3": "#6B7280",      # 弱化文字（仍 ≥4.5:1）
+    "ink_3": "#646B78",      # 弱化文字（对暖白 5.1:1，留出投影仪余量）
     "line": "#E3E0D8",       # 分隔线
     "line_soft": "#EEECE6",
     "bg": "#FBFAF7",         # 暖白底
@@ -74,11 +74,32 @@ CSS = f"""
 }}
 
 /* ── 基础排版 ───────────────────────────────────────────── */
-html, body, .stApp, [class*="st-"] {{
+/* 只给容器和文本元素设字体，**绝不用 [class*="st-"] 这类通配**：
+   它会命中 Streamlit 所有 st-emotion-cache-* 元素，包括图标 span，
+   把 Material Symbols 字体一起覆盖 —— 连字失效后箭头显示成
+   "keyboard_double_arrow_right" 这种字面文本。踩过一次，记在这里。 */
+html, body, .stApp {{
   font-family: {FONT};
   -webkit-font-smoothing: antialiased;
 }}
+.stApp p, .stApp li, .stApp label, .stApp input, .stApp textarea, .stApp select,
+.stApp button, .stApp [data-testid="stMarkdownContainer"] {{
+  font-family: {FONT};
+}}
 .stApp {{ background: var(--tb-bg); }}
+
+/* 图标字体保护：任何情况下都不能被中文字体栈顶掉，连字必须开启 */
+[data-testid="stIconMaterial"],
+span[class*="material-symbols"],
+span[class*="material-icons"],
+[data-testid="stExpanderToggleIcon"],
+[data-testid="stSidebarCollapseButton"] span {{
+  font-family: "Material Symbols Rounded", "Material Icons" !important;
+  font-feature-settings: "liga" 1 !important;
+  -webkit-font-feature-settings: "liga" 1 !important;
+  font-variant-ligatures: normal !important;
+  letter-spacing: normal !important;
+}}
 
 .block-container {{
   padding-top: 2.4rem;
@@ -221,6 +242,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
   font-weight: 500;
   color: var(--tb-ink);
   padding: .7rem .9rem;
+  line-height: 1.5;
+}}
+/* 只调图标自身，不改 summary 的布局方式 —— Streamlit 内部结构随版本变，
+   把 summary 改成 flex 容易在升级后崩版。根因是字体被覆盖，修字体即可。 */
+[data-testid="stExpanderToggleIcon"] {{
+  font-size: 18px !important;
+  color: var(--tb-ink-3) !important;
 }}
 [data-testid="stExpander"] summary:hover {{ background: #FAF9F6; }}
 [data-testid="stExpander"] [data-testid="stExpanderDetails"] {{ padding: .2rem .9rem .9rem; }}
