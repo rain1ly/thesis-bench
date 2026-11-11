@@ -77,9 +77,19 @@ with tab_todo:
                 )
                 note = st.text_input("备注（学生可见，可选）", key=f"note_{r.id}")
 
+                # 「通过」是把 AI 草稿转成正式答复的语义操作，误点等于让未经审阅的内容入库。
+                # 所以这一步加勾选确认。用 checkbox 而不是弹窗：
+                # 1) checkbox 点击即回写，不会踩 text_area 失焦那个坑；
+                # 2) 弹窗在 Streamlit 里和 rerun 配合容易出问题，现场演示风险高；
+                # 3) 不打断节奏 —— 勾一下，比"点开弹窗再点确定"少一半动作。
+                checked = st.checkbox(
+                    "我已核对这条答复，可以入库",
+                    key=f"ok_chk_{r.id}",
+                )
+
                 b1, b2, _ = st.columns([1, 1, 2])
                 # 同答疑台：不用 disabled 判断 text_area 的值（失焦前读不到），点了再校验
-                if b1.button("通过并入库", key=f"ok_{r.id}", type="primary"):
+                if b1.button("通过并入库", key=f"ok_{r.id}", type="primary", disabled=not checked):
                     ans = (st.session_state.get(f"ans_{r.id}") or answer or "").strip()
                     if not ans:
                         st.warning("答复不能为空，写一句再通过。")

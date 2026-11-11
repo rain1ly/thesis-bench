@@ -45,8 +45,19 @@ class Actor:
 
 # ------------------------------------------------------------------ 名册
 def teacher_names(db_path: str | Path | None = None) -> list[str]:
+    """教师名单，被指派问题多的排前面。
+
+    和学生名单同一个道理：默认身份该落在"有活干"的人身上，
+    而不是按姓名字典序碰巧排第一的那个。演示时第一屏才有内容。
+    """
     names = qa_store.teacher_names(db_path)
-    return names or ["张老师"]
+    if not names:
+        return ["张老师"]
+    load: dict[str, int] = {}
+    for r in qa_store.list_records(db_path=db_path):
+        if r.assigned_to:
+            load[r.assigned_to] = load.get(r.assigned_to, 0) + 1
+    return sorted(names, key=lambda n: (-load.get(n, 0), n))
 
 
 def student_names(db_path: str | Path | None = None) -> list[str]:

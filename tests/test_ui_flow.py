@@ -105,3 +105,28 @@ def test_empty_submit_warns_instead_of_crashing(app):
     app.run()
     assert not app.exception
     assert any("请先填写问题内容" in w.value for w in app.warning)
+
+
+def test_approve_requires_confirmation(app):
+    """老师端「通过并入库」必须先勾选确认。
+
+    这是把 AI 草稿转成正式答复的语义操作，误点等于让未经审阅的内容入库。
+    用 checkbox 而不是弹窗：勾选即时生效，不踩 text_area 失焦那个坑。
+    """
+    app.switch_page("pages/2_老师端.py")
+    app.run()
+    # 先切页面再切身份：以学生身份打开老师端会走到 st.stop()，
+    # 在 stop 之后的会话里再切页容易不生效，顺序反过来最稳。
+    role = [r for r in app.radio if r.key == "actor_role_widget"][0]
+    role.set_value("老师")
+    app.run()
+
+    ok = [b for b in app.button if b.label == "通过并入库"]
+    assert ok, "老师端应有待办"
+    assert all(b.disabled for b in ok), "未勾选时「通过并入库」必须禁用"
+
+    chk = [c for c in app.checkbox if c.label.startswith("我已核对")][0]
+    chk.check()
+    app.run()
+    ok = [b for b in app.button if b.label == "通过并入库"]
+    assert not ok[0].disabled, "勾选后应可点击"
