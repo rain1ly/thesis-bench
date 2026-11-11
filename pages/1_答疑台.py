@@ -167,51 +167,60 @@ with tab_ask:
     if not cfg.configured:
         st.caption("未配置模型密钥：提交后只做记录，导师需手动撰写答复。")
 
-    if st.button("提交问题", type="primary", disabled=not question.strip()):
-        draft, warn = "", ""
-        if cfg.configured:
-            prompt = build_prompt(thesis, actor.name, stage, category, question, similar)
-            # 用 status 面板把"思考过程"显式化：读到什么、匹配到什么、正在生成什么。
-            # 用户等 3 秒不安心，等 3 秒且知道在等什么就安心 —— 这是细则里"AI 状态可视化"的落点。
-            with st.status("AI 正在起草答复草稿…", expanded=True) as status:
-                st.caption(f"读取论文题目与问题分类（{category}）")
-                st.caption(
-                    f"匹配到历史答疑 {len(similar)} 条，已并入上下文"
-                    if similar
-                    else "未匹配到历史答疑，按新问题起草"
-                )
-                st.caption("生成草稿中，逐字返回")
-                draft = st.write_stream(chat_stream(cfg, SYSTEM_PROMPT, prompt))
-                if STREAM_ERROR_MARK in draft:
-                    err = draft.split(STREAM_ERROR_MARK)[-1].strip("：] ")
-                    warn = f"AI 起草失败：{err}（问题已记录，导师可手动答复）"
-                    draft = ""
-                    status.update(label="草稿生成失败，问题已记录", state="error")
-                else:
-                    status.update(
-                        label=f"草稿完成 · {len(draft)} 字 · 等待老师审核",
-                        state="complete",
+    # 按钮不做 disabled 判断 —— 这是踩过的坑：
+    # st.text_area 的内容要等失焦（或按 Ctrl+Enter）才写回 session_state，
+    # 所以"边打字边判断能不能提交"永远是旧值，按钮会一直灰着，
+    # 用户必须先点一下输入框外面才能点提交。改成点了再校验，一次就能提交。
+    if st.button("提交问题", type="primary"):
+        question_now = (st.session_state.get("q_text") or question or "").strip()
+        if not question_now:
+            st.warning("请先填写问题内容再提交。")
+        else:
+            question = question_now
+            draft, warn = "", ""
+            if cfg.configured:
+                prompt = build_prompt(thesis, actor.name, stage, category, question, similar)
+                # 用 status 面板把"思考过程"显式化：读到什么、匹配到什么、正在生成什么。
+                # 用户等 3 秒不安心，等 3 秒且知道在等什么就安心 —— 这是细则里"AI 状态可视化"的落点。
+                with st.status("AI 正在起草答复草稿…", expanded=True) as status:
+                    st.caption(f"读取论文题目与问题分类（{category}）")
+                    st.caption(
+                        f"匹配到历史答疑 {len(similar)} 条，已并入上下文"
+                        if similar
+                        else "未匹配到历史答疑，按新问题起草"
                     )
+                    st.caption("生成草稿中，逐字返回")
+                    draft = st.write_stream(chat_stream(cfg, SYSTEM_PROMPT, prompt))
+                    if STREAM_ERROR_MARK in draft:
+                        err = draft.split(STREAM_ERROR_MARK)[-1].strip("：] ")
+                        warn = f"AI 起草失败：{err}（问题已记录，导师可手动答复）"
+                        draft = ""
+                        status.update(label="草稿生成失败，问题已记录", state="error")
+                    else:
+                        status.update(
+                            label=f"草稿完成 · {len(draft)} 字 · 等待老师审核",
+                            state="complete",
+                        )
 
-        rid = qa_store.add_question(
-            student=actor.name,
-            question=question,
-            stage=stage,
-            ai_draft=draft,
-            tags="、".join(sorted({r.tags for _s, r in similar if r.tags})[:2]),
-            category=category,
-            visibility=visibility,
-            assigned_to=target_teacher,
-            thesis_title=thesis,
-        )
-        where = f"已派给 {target_teacher}" if target_teacher else "已放进公开池，任何老师都能接"
-        msg = f"已提交，编号 #{rid}，{where}。" + ("已生成草稿，等待老师审核。" if draft else "")
-        if warn:
-            msg += f" {warn}"
-        st.session_state["qa_flash"] = msg
-        if draft:
-            st.session_state["qa_last_draft"] = {"q": question, "d": draft}
-        st.rerun()
+            rid = qa_store.add_question(
+                student=actor.name,
+                question=question,
+                stage=stage,
+                ai_draft=draft,
+                tags="、".join(sorted({r.tags for _s, r in similar if r.tags})[:2]),
+                category=category,
+                visibility=visibility,
+                assigned_to=target_teacher,
+                thesis_title=thesis,
+            )
+            where = f"已派给 {target_teacher}" if target_teacher else "已放进公开池，任何老师都能接"
+            msg = f"已提交，编号 #{rid}，{where}。" + ("已生成草稿，等待老师审核。" if draft else "")
+            if warn:
+                msg += f" {warn}"
+            st.session_state["qa_flash"] = msg
+            if draft:
+                st.session_state["qa_last_draft"] = {"q": question, "d": draft}
+            st.rerun()
 
 # ------------------------------------------------------------------ 我的问题
 with tab_mine:

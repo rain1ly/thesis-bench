@@ -162,21 +162,28 @@ with tab_plan:
                 )
 
                 b1, b2, _sp = st.columns([1, 1.2, 2])
-                if b1.button("提交自评", key=f"sub_{idx}", type="primary", disabled=not answer.strip()):
-                    g = rehearsal.grade(answer, q)
-                    rehearsal_store.save(
-                        student=student,
-                        question=q.text,
-                        answer=answer,
-                        hit=g.hit,
-                        total=g.total,
-                        level=g.level,
-                        topic=q.topic,
-                        missing="、".join(g.missing),
-                        source_ids=item.source_ids,
-                    )
-                    st.session_state[f"reh_ver_{idx}"] = ver + 1  # 换个控件，输入框清空
-                    st.rerun()
+                # 同答疑台：text_area 失焦前值不回写，禁用按钮会一直灰着
+                if b1.button("提交自评", key=f"sub_{idx}", type="primary"):
+                    ans = (st.session_state.get(f"ans_{plan['token']:.0f}_{idx}_{ver}") or answer or "").strip()
+                    # 不用 st.stop()：那会把下面的题目一起清掉，用户以为页面坏了
+                    if not ans:
+                        st.warning("先写点什么再提交，哪怕只有一句结论。")
+                    else:
+                        answer = ans
+                        g = rehearsal.grade(answer, q)
+                        rehearsal_store.save(
+                            student=student,
+                            question=q.text,
+                            answer=answer,
+                            hit=g.hit,
+                            total=g.total,
+                            level=g.level,
+                            topic=q.topic,
+                            missing="、".join(g.missing),
+                            source_ids=item.source_ids,
+                        )
+                        st.session_state[f"reh_ver_{idx}"] = ver + 1  # 换个控件，输入框清空
+                        st.rerun()
 
                 cfg = load_config()
                 if b2.button(

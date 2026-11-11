@@ -78,10 +78,15 @@ with tab_todo:
                 note = st.text_input("备注（学生可见，可选）", key=f"note_{r.id}")
 
                 b1, b2, _ = st.columns([1, 1, 2])
-                if b1.button("通过并入库", key=f"ok_{r.id}", type="primary", disabled=not answer.strip()):
-                    qa_store.review(r.id, "已通过", answer=answer, note=note)
-                    st.session_state["te_flash"] = f"#{r.id} 已通过，答复已入库。"
-                    st.rerun()
+                # 同答疑台：不用 disabled 判断 text_area 的值（失焦前读不到），点了再校验
+                if b1.button("通过并入库", key=f"ok_{r.id}", type="primary"):
+                    ans = (st.session_state.get(f"ans_{r.id}") or answer or "").strip()
+                    if not ans:
+                        st.warning("答复不能为空，写一句再通过。")
+                    else:
+                        qa_store.review(r.id, "已通过", answer=ans, note=note)
+                        st.session_state["te_flash"] = f"#{r.id} 已通过，答复已入库。"
+                        st.rerun()
                 if b2.button("退回重问", key=f"back_{r.id}"):
                     qa_store.review(r.id, "已退回", answer=answer, note=note)
                     st.session_state["te_flash"] = f"#{r.id} 已退回。"

@@ -85,3 +85,23 @@ def test_private_question_has_no_public_pool_option(app):
     app.run()
     route = [r for r in app.radio if r.label == "答疑老师"][0]
     assert "公开给所有老师" not in route.options
+
+
+def test_submit_button_clickable_without_blur(app):
+    """提交按钮不能依赖 text_area 的实时值来决定是否可点。
+
+    Streamlit 的 text_area 要等失焦（或 Ctrl+Enter）才把内容写回 session_state，
+    所以 `disabled=not text.strip()` 在打字过程中永远看到旧值——
+    按钮一直灰着，用户必须先点一下输入框外面才能提交。这是被使用者当场发现的。
+    """
+    btn = [b for b in app.button if b.label == "提交问题"][0]
+    assert not btn.disabled, "输入框为空时按钮也不该禁用，否则用户输入后它仍然是灰的"
+
+
+def test_empty_submit_warns_instead_of_crashing(app):
+    """点了但没写内容：给提示，不炸，也不生成空记录。"""
+    btn = [b for b in app.button if b.label == "提交问题"][0]
+    btn.click()
+    app.run()
+    assert not app.exception
+    assert any("请先填写问题内容" in w.value for w in app.warning)
