@@ -24,7 +24,7 @@ import pandas as pd
 import streamlit as st
 
 from core import bootstrap, qa_store, rehearsal, rehearsal_store
-from core.ai_client import chat, load_config
+from core.ai_client import STREAM_ERROR_MARK, chat_stream, load_config
 from ui import components, theme
 
 theme.inject()
@@ -185,19 +185,28 @@ with tab_plan:
                     disabled=not (prev and cfg.configured),
                     help="提交之后才能追问" if not prev else ("需要先配置模型密钥" if not cfg.configured else "根据你的回答生成追问"),
                 ):
-                    with st.spinner("评委正在组织下一句…"):
-                        ok, text = chat(
-                            cfg,
-                            SYSTEM_FOLLOWUP,
-                            build_followup(q.text, tuple(p.name for p in q.points), prev.answer),
-                            max_tokens=300,
-                            temperature=0.4,
+                    with st.status("评委正在读你的回答…", expanded=True) as _st:
+                        st.caption(f"对照考察要点 {len(q.points)} 个，找没交代清楚的地方")
+                        st.caption("组织追问中，逐字返回")
+                        text = st.write_stream(
+                            chat_stream(
+                                cfg,
+                                SYSTEM_FOLLOWUP,
+                                build_followup(q.text, tuple(p.name for p in q.points), prev.answer),
+                                max_tokens=300,
+                                temperature=0.4,
+                            )
                         )
-                    if ok:
+                        if STREAM_ERROR_MARK in text:
+                            err = text.split(STREAM_ERROR_MARK)[-1].strip("：] ")
+                            text = ""
+                            _st.update(label="追问生成失败", state="error")
+                            st.error(f"追问生成失败：{err}　也可以先看下面的考察要点自查。")
+                        else:
+                            _st.update(label=f"追问已生成 · {len(text)} 字", state="complete")
+                    if text:
                         rehearsal_store.attach_ai_note(prev.id, text)
                         st.rerun()
-                    else:
-                        st.error(f"追问失败：{text}")
 
                 # 答完再点这个 —— 顺序反了就等于抄答案
                 with st.expander("查看考察要点"):

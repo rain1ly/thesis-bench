@@ -194,3 +194,62 @@ def chat(
         return True, (resp.choices[0].message.content or "").strip()
     except Exception as exc:  # noqa: BLE001
         return False, _explain(exc, config.model)
+
+
+# 流式生成失败时，错误说明以这个前缀附在已生成内容之后。
+# 上层据此判断"这次草稿要不要入库" —— 把报错当草稿存进数据库，比不生成更糟。
+STREAM_ERROR_MARK = "\n\n[生成中断"
+
+
+def chat_stream(
+    config: AIConfig,
+    system: str,
+    user: str,
+    max_tokens: int = 900,
+    temperature: float = 0.3,
+    timeout: float = 60.0,
+):
+    """流式对话：边生成边吐出文本片段，供 st.write_stream() 直接消费。
+
+    与 chat() 的差别只在返回形式，约定完全一致：
+    **失败不抛裸异常**，而是把中文原因 yield 出去，页面不会因为网络抖动白屏。
+
+    设计取舍：不做"先缓冲再一次性吐出"的假流式。
+    假流式的唯一好处是出错时能整段丢弃；代价是用户多等 5–10 秒看不到任何动静。
+    这里选择真流式 + 错误标记，因为「有没有反应」比「出错时更干净」更影响观感。
+    """
+    if not config.configured:
+        yield f"{STREAM_ERROR_MARK}：密钥未配置，无法生成]"
+        return
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        yield f"{STREAM_ERROR_MARK}：缺少 openai 依赖]"
+        return
+
+    try:
+        client = OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=timeout)
+        stream = client.chat.completions.create(
+            model=config.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
+        got = False
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            delta = getattr(choices[0].delta, "content", None)
+            if delta:
+                got = True
+                yield delta
+        if not got:
+            yield f"{STREAM_ERROR_MARK}：模型返回为空，请重试]"
+    except Exception as exc:  # noqa: BLE001
+        yield f"{STREAM_ERROR_MARK}：{_explain(exc, config.model)}]"

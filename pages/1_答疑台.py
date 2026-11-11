@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from core import bootstrap, identity, qa_store
-from core.ai_client import chat, load_config
+from core.ai_client import STREAM_ERROR_MARK, chat_stream, load_config
 from core.qa_store import CATEGORIES, STAGES
 from ui import components, theme
 
@@ -98,6 +98,16 @@ with st.container(border=True):
                 st.session_state["prof_flash"] = "档案已保存。"
                 st.rerun()
 
+_flash = st.session_state.pop("qa_flash", None)
+if _flash:
+    st.success(_flash)
+
+_last = st.session_state.pop("qa_last_draft", None)
+if _last:
+    with st.expander(f"刚生成的草稿：{_last['q'][:28]}", expanded=True):
+        st.markdown(f"> {_last['d']}")
+        st.caption("草稿已入库，状态为「待审核」。老师修改后的定稿会显示在「我的问题」里。")
+
 tab_ask, tab_mine, tab_open = st.tabs(["我要提问", "我的问题", "公开问答"])
 
 # ------------------------------------------------------------------ 提问
@@ -160,16 +170,28 @@ with tab_ask:
     if st.button("提交问题", type="primary", disabled=not question.strip()):
         draft, warn = "", ""
         if cfg.configured:
-            with st.spinner("正在起草答复草稿…"):
-                ok, text = chat(
-                    cfg,
-                    SYSTEM_PROMPT,
-                    build_prompt(thesis, actor.name, stage, category, question, similar),
+            prompt = build_prompt(thesis, actor.name, stage, category, question, similar)
+            # 用 status 面板把"思考过程"显式化：读到什么、匹配到什么、正在生成什么。
+            # 用户等 3 秒不安心，等 3 秒且知道在等什么就安心 —— 这是细则里"AI 状态可视化"的落点。
+            with st.status("AI 正在起草答复草稿…", expanded=True) as status:
+                st.caption(f"读取论文题目与问题分类（{category}）")
+                st.caption(
+                    f"匹配到历史答疑 {len(similar)} 条，已并入上下文"
+                    if similar
+                    else "未匹配到历史答疑，按新问题起草"
                 )
-            if ok:
-                draft = text
-            else:
-                warn = f"AI 起草失败：{text}（问题已记录，导师可手动答复）"
+                st.caption("生成草稿中，逐字返回")
+                draft = st.write_stream(chat_stream(cfg, SYSTEM_PROMPT, prompt))
+                if STREAM_ERROR_MARK in draft:
+                    err = draft.split(STREAM_ERROR_MARK)[-1].strip("：] ")
+                    warn = f"AI 起草失败：{err}（问题已记录，导师可手动答复）"
+                    draft = ""
+                    status.update(label="草稿生成失败，问题已记录", state="error")
+                else:
+                    status.update(
+                        label=f"草稿完成 · {len(draft)} 字 · 等待老师审核",
+                        state="complete",
+                    )
 
         rid = qa_store.add_question(
             student=actor.name,
@@ -187,14 +209,12 @@ with tab_ask:
         if warn:
             msg += f" {warn}"
         st.session_state["qa_flash"] = msg
+        if draft:
+            st.session_state["qa_last_draft"] = {"q": question, "d": draft}
         st.rerun()
 
 # ------------------------------------------------------------------ 我的问题
 with tab_mine:
-    flash = st.session_state.pop("qa_flash", None)
-    if flash:
-        st.success(flash)
-
     rows = qa_store.list_records(student=actor.name)
     if not rows:
         st.info("你还没有提过问题。")
