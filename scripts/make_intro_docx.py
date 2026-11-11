@@ -235,6 +235,29 @@ def footer_page_number(doc):
 
 
 # ---------------------------------------------------------------- 文档
+def commit_count() -> str:
+    """提交数不写死。
+
+    写死过一次：初稿写 23 次，改了两轮就变成 25，文档比仓库还旧。
+    数字类事实能从仓库里读的，就不要手填。
+    """
+    import subprocess
+
+    repo = Path(__file__).resolve().parent.parent
+    try:
+        out = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        n = out.stdout.strip()
+        return n if n.isdigit() else "20 余"
+    except Exception:
+        return "20 余"
+
+
 def build() -> None:
     doc = Document()
 
@@ -312,7 +335,7 @@ def build() -> None:
                 "过程可复现性与演进链路",
                 "25%",
                 "第三章",
-                "25 次提交时间线、三次推翻记录、Prompt 归档与约束来历",
+                f"{commit_count()} 次提交时间线、三次推翻记录、Prompt 归档与约束来历",
             ],
             [
                 "解题有效性与实用价值",
@@ -592,7 +615,7 @@ def build() -> None:
         doc,
         ["材料", "位置", "内容"],
         [
-            ["提交历史", "git log（25 次）", "每次提交对应一个可验证的功能范围"],
+            ["提交历史", f"git log（{commit_count()} 次）", "每次提交对应一个可验证的功能范围"],
             ["Prompt 归档", "prompts/（4 份）", "两处 Prompt 全文、逐条约束来历、实测核对、哪些已验证/未验证"],
             ["AI 协作说明", "docs/AI协作说明.md", "分工表、三次推翻、四件不做的事"],
             ["技术文档", "docs/技术文档.md", "含「一次被推翻的判断」整节，保留原结论"],
