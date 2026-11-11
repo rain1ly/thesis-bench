@@ -44,11 +44,23 @@ ACCENT = colors.HexColor("#185FA5")
 DANGER = colors.HexColor("#A32D2D")
 
 TITLE = ParagraphStyle("t", fontName="Hei", fontSize=17, leading=21, textColor=INK)
-SUB = ParagraphStyle("s", fontName="YaHei", fontSize=8.5, leading=13, textColor=MUTED)
+SUB = ParagraphStyle("s", fontName="YaHei", fontSize=8.5, leading=13, textColor=MUTED, wordWrap="CJK")
 H2 = ParagraphStyle("h2", fontName="Hei", fontSize=11, leading=15, textColor=INK, spaceBefore=6, spaceAfter=3)
-BODY = ParagraphStyle("b", fontName="YaHei", fontSize=8.4, leading=13, textColor=INK)
-NOTE = ParagraphStyle("n", parent=BODY, fontSize=8, leading=12, textColor=MUTED)
-CELL = ParagraphStyle("c", fontName="YaHei", fontSize=8.8, leading=12.6, textColor=INK, alignment=TA_LEFT)
+BODY = ParagraphStyle("b", fontName="YaHei", fontSize=8.4, leading=13, textColor=INK, wordWrap="CJK")
+NOTE = ParagraphStyle("n", parent=BODY, fontSize=8, leading=12, textColor=MUTED, wordWrap="CJK")
+# wordWrap="CJK" 是必须的，不是可选优化：
+# reportlab 默认按空格断词，而中文没有空格 —— 整段会被当成一个不可分割的"单词"，
+# 列宽装不下时不会换行，而是把词整个甩到下一行并溢出列边界。
+# 现象：明明列很宽，一行却只排了十几个字，下一行离谱地长。
+CELL = ParagraphStyle(
+    "c",
+    fontName="YaHei",
+    fontSize=8.8,
+    leading=12.6,
+    textColor=INK,
+    alignment=TA_LEFT,
+    wordWrap="CJK",
+)
 CELL_C = ParagraphStyle("cc", parent=CELL, fontName="Hei", textColor=colors.HexColor("#0C447C"))
 CELL_MUTED = ParagraphStyle("cm", parent=CELL, fontSize=8.2, leading=12.6, textColor=MUTED)
 TH = ParagraphStyle("th", fontName="Hei", fontSize=9.2, leading=13, textColor=colors.white)
@@ -59,8 +71,8 @@ ROWS = [
     ("0:26–0:40", "鼠标缓慢扫过三张卡片与四个指标", "所以拆成三层，是<b>一条链</b>：上一层的产出是下一层的输入"),
     ("0:40–1:02", "学生端提问：分类选「数据分析」，答疑老师选「我的指导老师」，可见性选「隐私」", "提问先定三件事：属于哪类问题、交给谁、给谁看。隐私只有我和老师可见"),
     ("1:02–1:16", "输入问题 → 下方出现「问过 1 次，相似 62%」", "还没提交就提示问过 —— 这一步不调模型，字符重叠就够"),
-    ("1:16–1:32", "点提交 → AI 起草出现（约 140 字）", "AI 只给草稿，200 字以内；涉及数据判断必须写「需要导师确认」"),
-    ("1:32–2:02", "侧边栏切到<b>老师</b> → 待办展开 → 改一句 → 通过入库 → 我的学生表", "换个身份看：老师这边是待办和名单，论文题目就在表里。学生的困惑不经过我审核就不算答复"),
+    ("1:16–1:33", "点提交 → 状态面板展开：读取题目与分类 → 匹配历史 1 条 → 草稿<b>逐字</b>写出", "AI 只给草稿，200 字以内；涉及数据判断写「需要导师确认」。逐字返回是为了让它看起来在处理，而不是一个转圈图标"),
+    ("1:33–2:04", "侧边栏切到<b>老师</b> → 待办展开 → 改一句 → <b>勾「我已核对」</b> → 通过入库 → 我的学生表", "换身份看：老师这边是待办和名单，论文题目就在表里。<b>不勾选点不了通过</b> —— AI 草稿不经过我确认就不算答复"),
     ("2:02–2:16", "切回<b>学生</b> → 我的问题 → 答复已入库", "学生看到的是导师改过的定稿，不是 AI 原话"),
     ("2:16–2:38", "写作台 → 上传 samples 的 docx → 13 项问题", "四类规则检查，确定性：同一份文档永远得到同一份清单"),
     ("2:38–2:54", "预演台 → 风险画像表", "出题依据不是题库，是<b>这个学生的困惑史</b>：数据来源 4 次、横跨三个阶段"),
@@ -72,10 +84,11 @@ ROWS = [
 ]
 
 PREP = [
-    ("① 埋钩子", "先去预演台答一次只说来源（得 1/3）→ 关掉；录的时候答第二遍拿 3/3，轨迹才出现 1/3 → 3/3"),
-    ("② 定身份", "侧边栏确认是「学生 · 陈同学」，别停在老师身份开录（默认就是陈同学，她有 15 条答疑）"),
-    ("③ 唤醒容器", "免费版闲置会休眠，提前打开一次，等页面完全出来再开录"),
-    ("④ 清场", "F11 全屏、缩放 100%、关通知；桌面不要开终端，不要露 .env；只留一个标签页"),
+    ("① 重置数据", "跑 <b>scripts/reset_demo.py --yes</b> 回到 30 条干净示例。不重置会查出「问过 2 次、相似 100%」—— 试过的那句已经进库了"),
+    ("② 埋钩子", "预演台答一次只说来源（1/3）→ 关掉；录时答第二遍拿 3/3，轨迹才出现 1/3 → 3/3"),
+    ("③ 定身份", "侧边栏确认「学生 · 陈同学」，别停在老师身份开录（重置后她有 15 条答疑）"),
+    ("④ 唤醒容器", "免费版闲置会休眠，提前打开一次，等页面完全出来再开录"),
+    ("⑤ 清场", "F11 全屏、缩放 100%、关通知；桌面别开终端，别露 .env；只留一个标签页"),
 ]
 
 INPUTS = [
@@ -84,6 +97,8 @@ INPUTS = [
     ("预演台 · 第二答", "数据来自UCI的公开数据集，做了字段映射和量纲换算；局限是只覆盖夏季，极寒场景不适用。", "3/3 · 扎实"),
     ("写作台", "data/samples/ 里任一份 docx", "样本一 6 项 / 3 严重；样本二 7 项 / 4 严重"),
 ]
+
+# 上面右侧数字全部是「重置后」的实测值。不重置会出现 100% 相似、17 条答疑 —— 画面和这里对不上。
 
 TRAPS = [
     "鼠标乱晃 —— 录屏第一杀手。移动要慢，点到哪儿停稳半秒再点。",
@@ -122,7 +137,7 @@ def footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("YaHei", 7.5)
     canvas.setFillColor(MUTED)
-    canvas.drawString(14 * mm, 9 * mm, "论文工坊 · ThesisBench ｜ 演示视频分镜表 ｜ 2026-10-29")
+    canvas.drawString(14 * mm, 9 * mm, "论文工坊 · ThesisBench ｜ 演示视频分镜表 ｜ 2026-11-11")
     canvas.drawRightString(landscape(A4)[0] - 14 * mm, 9 * mm, f"第 {doc.page} 页")
     canvas.restoreState()
 
@@ -146,7 +161,7 @@ def build() -> None:
     story.append(
         Paragraph(
             "2026 第九届传智杯 · AI 创新应用挑战赛（个人赛 · B 组）　|　"
-            "4 分钟版　|　含 2 分钟 AI 协同实拍　|　2026-10-29（对应新版界面）",
+            "4 分钟版　|　含 2 分钟 AI 协同实拍　|　2026-11-11 v3（含流式与勾选确认）",
             SUB,
         )
     )
@@ -170,10 +185,10 @@ def build() -> None:
 
     story.append(Paragraph("录前准备与录屏输入", TITLE))
     story.append(
-        Paragraph("第 1 页拍摄时看，这一页开录前看一遍。顺序别换 —— 第①条没做，后面录得再顺，视频也只是功能清单。", SUB)
+        Paragraph("第 1 页拍摄时看，这一页开录前看一遍。顺序别换 —— 第②条没做，后面录得再顺，视频也只是功能清单。", SUB)
     )
     story.append(Spacer(1, 2 * mm))
-    story.append(Paragraph("录之前先做四件事", H2))
+    story.append(Paragraph("录之前先做五件事", H2))
     story.append(Spacer(1, 3 * mm))
 
     prep_rows = [[p("", TH), p("做法", TH)]]
@@ -184,7 +199,7 @@ def build() -> None:
     story.append(Spacer(1, 2 * mm))
     story.append(
         Paragraph(
-            "<font color='#A32D2D'>① 是唯一一步不在录屏里、却决定视频有没有说服力的动作</font>："
+            "<font color='#A32D2D'>② 是唯一一步不在录屏里、却决定视频有没有说服力的动作</font>："
             "没有那条 1/3 → 3/3 的轨迹，预演台在观众眼里只是个答题框。",
             NOTE,
         )
@@ -204,7 +219,7 @@ def build() -> None:
     story.append(Spacer(1, 2 * mm))
     story.append(
         Paragraph(
-            "以上为 2026-10-29 在示例数据上的实测值。改过题库、示例数据或章节结构后，"
+            "以上为 2026-11-11 在示例数据上的实测值。改过题库、示例数据或章节结构后，"
             "<font color='#A32D2D'>录前重跑 scripts/preflight.py 并重新核对</font> —— "
             "视频里的数字和界面对不上，比没有视频更糟。",
             NOTE,
