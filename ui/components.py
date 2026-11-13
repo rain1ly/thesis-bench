@@ -58,6 +58,52 @@ def topbar(who: str = "", page: str = "", date: str = "") -> None:
     )
 
 
+def nav() -> None:
+    """章节导航条。单页之后没有"页面"可跳，位置感全靠这一条。
+
+    锚点是普通 `<a href="#xxx">`：只改 URL hash，浏览器自己滚，不触发 rerun。
+    用 st.page_link 或 st.button 都会走一次服务端往返，滚动式体验就断了。
+    """
+    import streamlit as st
+
+    items = [
+        ("home", "01", "首页", "HOME"),
+        ("qa", "02", "答疑台", "QA"),
+        ("writing", "03", "写作台", "CHECK"),
+        ("rehearsal", "04", "预演台", "REHEARSE"),
+    ]
+    links = "".join(
+        f'<a href="#{key}"><span class="no">{no}</span><span>{name}</span>'
+        f'<span class="en">{en}</span></a>'
+        for key, no, name, en in items
+    )
+    st.markdown(f'<div class="tb-nav">{links}</div>', unsafe_allow_html=True)
+
+
+def anchor(key: str) -> None:
+    """区块锚点。高度 0，只承担"滚到这里"和"避开固定头"两件事。"""
+    import streamlit as st
+
+    st.markdown(f'<span id="{_esc(key)}" class="tb-anchor"></span>', unsafe_allow_html=True)
+
+
+def section_head(no: str, title: str, en: str, desc: str) -> None:
+    """区块标头：编号 + 英文小标 + 大标题 + 一句说明。
+
+    比 hero 紧凑一档 —— 单页里每个区块都有标头，太大会把一屏占满。
+    """
+    import streamlit as st
+
+    st.markdown(
+        f"""<div class="tb-sechead">
+  <div class="sh-top"><span class="sh-no">{_esc(no)}</span><span class="sh-en">{_esc(en)}</span></div>
+  <h2 class="sh-title">{title}</h2>
+  <p class="sh-desc">{_esc(desc)}</p>
+</div>""",
+        unsafe_allow_html=True,
+    )
+
+
 def identity_chip(actor=None, page: str = "") -> None:
     """顶栏右端的身份方框 —— 真的能点，点开就是切换器。
 
@@ -85,14 +131,18 @@ def identity_chip(actor=None, page: str = "") -> None:
     name_k = f"pop_name_{actor.role}_{actor.name}"
 
     def _on_role() -> None:
-        # 只切角色，名字留空 —— 由 render_switcher 兜底成新名单的第一个
+        # 只切角色，名字留空 —— 由 identity.ensure() 兜底成新名单的第一个
         st.session_state["_actor_pending"] = (st.session_state.get(role_k, actor.role), "")
+        # 必须再 rerun 一次：本轮开头 ensure() 已经跑过了，标记要到下一轮才被消费。
+        # 不补这一次，用户切完看不到任何变化，得手动再点一下才生效。
+        st.rerun()
 
     def _on_name() -> None:
         st.session_state["_actor_pending"] = (
             st.session_state.get(role_k, actor.role),
             st.session_state.get(name_k, actor.name),
         )
+        st.rerun()
 
     # 不加 icon：`:material/` 图标在 popover 按钮里可能被渲染成图标名字面量
     # （Material Symbols 靠连字，一旦字体没加载完就会露出 swap_horiz 这种原文）。

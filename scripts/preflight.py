@@ -18,14 +18,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-PAGES = [
-    "app.py",
-    "pages/1_答疑台.py",
-    "pages/2_老师端.py",
-    "pages/3_写作台.py",
-    "pages/4_预演台.py",
-    "pages/9_环境自检.py",
-]
+# 单页化之后只有一个入口，检查的是"五个区块是否都渲染出来"。
+# 用锚点 id 判断，不用 st-key 类名：AppTest 只拿得到 markdown 文本，拿不到 DOM 的 class。
+SECTIONS = ["home", "qa", "writing", "rehearsal", "tail"]
 
 OK, BAD = "[PASS]", "[FAIL]"
 
@@ -44,35 +39,32 @@ def run_tests() -> bool:
 
 
 def run_pages() -> bool:
-    """以 app.py 为入口逐个切换页面。
+    """渲染单页入口，并检查五个区块的容器都出现了。
 
-    不能直接 AppTest.from_file("pages/xxx.py")：st.page_link 的路径是相对**主脚本**
-    解析的，从页面文件起步会把 "pages/1_答疑台.py" 解析成 pages/pages/…，
-    体检脚本就会天天误报"页面找不到"。真实运行时入口永远是 app.py，按真实路径测。
+    多页时代是逐页 switch_page；单页之后没有"页面"，
+    改成断言每个 section 的 key 类名都出现在 DOM 里 ——
+    某一段整块没渲染（比如身份分支写反）能当场发现。
     """
-    print("2/3 渲染页面 …")
+    print("2/3 渲染单页 …")
     from streamlit.testing.v1 import AppTest
 
-    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=90)
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
     at.run()
 
-    all_ok = True
     errs = [str(e.value) for e in at.exception]
     if errs:
-        all_ok = False
-        print(f" {BAD} app.py: {errs[0][:120]}")
-    else:
-        print(f" {OK} app.py")
+        print(f" {BAD} app.py: {errs[0][:140]}")
+        return False
+    print(f" {OK} app.py 渲染无异常")
 
-    for page in PAGES[1:]:
-        at.switch_page(page)
-        at.run()
-        errs = [str(e.value) for e in at.exception]
-        if errs:
-            all_ok = False
-            print(f" {BAD} {page}: {errs[0][:120]}")
+    html = " ".join(str(m.value) for m in at.markdown)
+    all_ok = True
+    for sec in SECTIONS:
+        if f'id="{sec}"' in html:
+            print(f" {OK} 区块 #{sec}")
         else:
-            print(f" {OK} {page}")
+            print(f" {BAD} 区块 #{sec} 未渲染")
+            all_ok = False
     return all_ok
 
 

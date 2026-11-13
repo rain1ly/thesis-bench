@@ -142,65 +142,49 @@ def current() -> Actor:
     return Actor(role=role, name=name)
 
 
-def render_switcher() -> Actor:
-    """在侧边栏渲染身份切换器，返回当前身份。
+def ensure() -> Actor:
+    """消费挂起的身份切换，返回当前身份。**不渲染任何控件。**
 
-    为什么放侧边栏：它要跟着每一页走，但又不能占正文的注意力 ——
-    演示时观众该看的是业务，不是"你正在扮演谁"。
+    身份入口只有一个：顶栏右端那个 popover（`components.identity_chip`）。
+    侧边栏原来那套 radio + selectbox 已经拆掉 —— 两个入口同时存在时，
+    popover 每轮都会拿它自己的旧名字把身份改回去，两边互相打架
+    （上一版就是这个毛病，4 条身份测试当场红掉）。
 
-    **这里必须用 key 管状态，不能靠 index。**
-    无 key 的 selectbox 每轮 rerun 都按 index 重置一次值，而 index 又是从
-    session_state 里的名字算出来的 —— 两者互相喂，控件就被锁死了：
-    手动切换看着成功，下一次 rerun 又弹回去。加 key 之后 state 归控件自己管。
+    为什么仍然需要「挂起标记」：控件一旦创建，它的 key 就不能再写
+    （StreamlitAPIException: cannot be modified after the widget ... is instantiated）。
+    所以切换方只写 `_actor_pending`，由这里在下一轮最开头消费。
     """
     import streamlit as st
 
-    role_key = "actor_role_widget"
-    name_key = "actor_name_widget"
-
-    # 其他页面可以请求切换身份（比如老师端的「切换为老师身份」按钮）。
-    # 关键：控件一旦创建，它的 key 就不能再被写 ——
-    # 直接改 st.session_state["actor_role_widget"] 会抛
-    # StreamlitAPIException: cannot be modified after the widget ... is instantiated。
-    # 所以这里用「挂起标记」，在本函数里、控件创建**之前**消费掉。
     pending = st.session_state.pop("_actor_pending", None)
     if pending:
         p_role, p_name = pending
-        st.session_state[role_key] = p_role
+        st.session_state["actor_role"] = p_role
         if p_name:
-            st.session_state[name_key] = p_name
+            st.session_state["actor_name"] = p_name
         else:
-            # 只切角色（顶栏方框里改角色那一下）：清掉名字，
-            # 交给下面的"值不在名单里就取第一个"兜底，选新名单的第一个人
-            st.session_state.pop(name_key, None)
+            # 只切角色（顶栏方框里改角色那一下）：名字交给新名单的第一个
+            pool = student_names() if p_role == "学生" else teacher_names()
+            st.session_state["actor_name"] = pool[0]
 
-    with st.sidebar:
-        st.divider()
-        st.caption("当前身份")
-        role = st.radio(
-            "角色",
-            ROLES,
-            horizontal=True,
-            label_visibility="collapsed",
-            key=role_key,
-        )
-        pool = student_names() if role == "学生" else teacher_names()
-        # 切角色后名单会换（学生 ↔ 老师），旧值可能不在新名单里，先兜底再渲染
-        if st.session_state.get(name_key) not in pool:
-            st.session_state[name_key] = pool[0]
-        name = st.selectbox("身份", pool, key=name_key, label_visibility="collapsed")
-        st.session_state["actor_role"] = role
-        st.session_state["actor_name"] = name
-        st.caption("演示版用身份切换代替登录；生产环境接学校统一认证。")
+    actor = current()
+    # 把当前身份显式写回 state：current() 可能只是用了默认值而没落库，
+    # 外部（测试、调试面板）读 session_state["actor_role"] 会拿到 None
+    st.session_state["actor_role"] = actor.role
+    st.session_state["actor_name"] = actor.name
 
-    # 身份真的变了才提示。没有这个反馈时，用户从顶栏切完只看到页面闪一下，
-    # 很难判断"到底切没切"—— 尤其两个身份的界面结构长得很像。
-    _last = st.session_state.get("_actor_last")
-    if _last and _last != (role, name):
-        st.toast(f"已切换：{role} · {name}")
-    st.session_state["_actor_last"] = (role, name)
+    # 身份真的变了才提示。没有这个反馈，用户切完只看到页面闪一下，
+    # 很难判断到底切没切 —— 两个身份的界面结构长得很像。
+    last = st.session_state.get("_actor_last")
+    if last and last != (actor.role, actor.name):
+        st.toast(f"已切换：{actor.role} · {actor.name}")
+    st.session_state["_actor_last"] = (actor.role, actor.name)
 
-    return Actor(role=role, name=name)
+    return actor
+
+
+# 过渡别名：旧的 pages/ 脚本仍按这个名字调用，行为与 ensure 一致
+render_switcher = ensure
 
 
 # ------------------------------------------------------------------ 老师端视图数据

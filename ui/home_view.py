@@ -82,14 +82,33 @@ CSS = """
   gap: clamp(8px, 1.2vw, 16px);
   margin-top: clamp(10px, 1.4vw, 20px);
 }
+/* 荧光笔：不能用 background 包住整个行盒（那样上下都留白，像标签），
+   而是用伪元素画一条独立的横带，压在文字后面。
+   isolation:isolate 不能省 —— 卡片是白底，z-index:-1 会跑到白底后面直接看不见；
+   给元素单开一个层叠上下文，它才落在「白底之上、文字之下」，正是马克笔的位置。 */
 .cv-sub .hl {
-  background: #F5E027;
+  position: relative;
+  isolation: isolate;
+  background: none;
   color: #111111;
   font-weight: 900;
+  /* Windows 的微软雅黑最粗只到 Bold，900 会落到 700；
+     补一点描边才够参考图那种粗度。只加这四个字，不影响别处。 */
+  -webkit-text-stroke: 0.3px #111111;
   font-size: clamp(16px, 2.3vw, 33px);
   letter-spacing: 0.02em;
-  padding: 0 .28em;
+  padding: 0 .1em;
   line-height: 1.32;
+}
+.cv-sub .hl::before {
+  content: "";
+  position: absolute;
+  left: -.06em;
+  right: -.06em;
+  bottom: .26em;
+  height: .46em;
+  background: #F5E027;
+  z-index: -1;
 }
 .cv-sub .tag {
   font-family: __MONO__;
@@ -108,10 +127,17 @@ CSS = """
   margin-top: auto;
   padding: clamp(12px, 1.5vw, 18px) 0 clamp(14px, 1.8vw, 22px);
 }
-/* 节点不包 <a>：`<a href>` 会让浏览器整页重新加载，点一下白屏闪一下，
-   像是"跳去了另一个网站"。真正的入口是卡片下面那行 st.page_link，
-   走 Streamlit 前端路由，无刷新。 */
-.cv-node { flex: 1 1 0; min-width: 0; }
+/* 节点是可点的锚点链接：href="#qa" 只改 URL hash，
+   浏览器自己滚到对应区块，不触发 Streamlit rerun —— 所以是顺滑滚动，不是刷新。 */
+.cv-node {
+  flex: 1 1 0;
+  min-width: 0;
+  display: block;
+  text-decoration: none !important;
+  color: #111111 !important;
+}
+.cv-node:link, .cv-node:visited { color: #111111 !important; }
+.cv-node:hover .n-name { box-shadow: inset 0 -.28em 0 0 #F5E027; }
 .n-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .n-no {
   font-family: __MONO__; font-size: clamp(8px, 0.72vw, 10px);
@@ -234,7 +260,7 @@ CSS = """
   font-family: __MONO__; font-size: clamp(5.5px, 0.5vw, 7px);
   letter-spacing: 0.18em; color: #9A9A9A; flex-wrap: wrap;
 }
-.cv-foot .page { margin-left: auto; }
+.cv-foot .page { margin-left: auto; letter-spacing: 0.2em; }
 
 @media (max-width: 820px) {
   .cv-ring { flex: 1 1 100%; }
@@ -255,7 +281,6 @@ def render(
     queue: list[dict],
     foot: list[str],
     queue_title: str = "待我处理",
-    page: str = "01 / 05",
     demo: bool = False,
 ) -> None:
     """渲染首页。chain / queue / foot 由调用方按真实数据组装。"""
@@ -282,13 +307,13 @@ def render(
         if i:
             nodes.append('<div class="n-arrow">→</div>')
         nodes.append(
-            f'<div class="cv-node">'
+            f'<a class="cv-node" href="{_e(n.get("href", "#"))}">'
             f'<div class="n-head"><span class="n-no">{_e(n.get("no", ""))}</span>'
             f'<span class="n-en">{_e(n.get("en", ""))}</span></div>'
             f'<div class="n-name">{_e(n.get("name", ""))}</div>'
             f'<div class="n-nums">{_e(n.get("nums", ""))}</div>'
             f'<div class="n-desc">{_e(n.get("desc", ""))}</div>'
-            "</div>"
+            "</a>"
         )
 
     rows = []
@@ -370,7 +395,7 @@ def render(
   <span class="enter">ENTER ↗</span>
 </div>
 
-<div class="cv-foot">{foot_html}<span class="page">PAGE {_e(page)}</span></div>
+<div class="cv-foot">{foot_html}<span class="page">SCROLL ／ 向下继续</span></div>
 """,
         unsafe_allow_html=True,
     )

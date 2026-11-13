@@ -1,20 +1,25 @@
-"""界面交互回归 —— 守两个被用户当场发现的 session_state 坑。
+"""界面交互回归 —— 守几个被用户当场发现的 session_state 坑。
 
-这两个 bug 都不是"功能没做"，而是**状态串了**：
-1. 身份切换器的 selectbox 没有 key，却每轮传 index（index 又来自 session_state），
-   两者互相喂，控件被锁死 —— 手动切身份看着成功，下一轮弹回去；
-2. 档案编辑表单的控件没有绑定身份，切学生会把上一个人的题目和导师带过来，
-   于是"顶部只读值"和"下拉里的值"同屏给出两个答案。
+1. 身份切换曾经被 index 锁死：无 key 的 selectbox 每轮按 index 重置值，
+   而 index 又来自 session_state，两者互相喂 —— 手动切成功，下一轮弹回去。
+2. 档案编辑表单的控件没绑身份，切学生会把上一个人的题目和导师带过来，
+   于是"只读值"和"下拉里的值"同屏给出两个答案。
+3. 提交按钮曾经用 `disabled=not text.strip()`：text_area 失焦前值不回写，
+   按钮永远灰着，用户必须先点一下输入框外面。
 
-AppTest 能跑真实脚本、真实 session_state，所以这类问题只能用交互测。
+**单页化之后**：没有 pages/ 目录，也没有 switch_page。
+所有区块在同一页里，身份切换走顶栏那个 popover（key 以 `pop_name_` 开头）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from core import qa_store, qa_seed, rehearsal_store
+from core import qa_seed, qa_store, rehearsal_store
+
+APP = Path(__file__).resolve().parent.parent / "app.py"
 
 
 @pytest.fixture()
@@ -26,23 +31,28 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(rehearsal_store, "DB_PATH", tmp_path / "reh.db")
     qa_seed.load_seed(db_path=tmp_path / "qa.db")
 
-    at = AppTest.from_file(str(Path(__file__).resolve().parent.parent / "app.py"), default_timeout=90)
-    at.run()
-    at.switch_page("pages/1_答疑台.py")
+    at = AppTest.from_file(str(APP), default_timeout=120)
     at.run()
     return at
 
 
 def _profile(at) -> tuple[str | None, str | None]:
-    """当前页上，表单下拉里的指导老师 / 论文题目。"""
+    """表单下拉里的指导老师 / 论文题目。"""
     adv = [s.value for s in at.selectbox if s.label == "指导老师"]
     title = [t.value for t in at.text_input if t.label == "论文题目"]
     return (adv[0] if adv else None), (title[0] if title else None)
 
 
-def _switch(at, name: str):
-    who = [s for s in at.selectbox if s.label == "身份"][0]
-    who.set_value(name)
+def _switch(at, name: str) -> None:
+    """走顶栏 popover 里那个姓名下拉 —— 和用户真实操作同一条路径。"""
+    box = [s for s in at.selectbox if (s.key or "").startswith("pop_name")][0]
+    box.set_value(name)
+    at.run()
+
+
+def _switch_role(at, role: str) -> None:
+    box = [r for r in at.radio if (r.key or "").startswith("pop_role")][0]
+    box.set_value(role)
     at.run()
 
 
@@ -90,9 +100,9 @@ def test_private_question_has_no_public_pool_option(app):
 def test_submit_button_clickable_without_blur(app):
     """提交按钮不能依赖 text_area 的实时值来决定是否可点。
 
-    Streamlit 的 text_area 要等失焦（或 Ctrl+Enter）才把内容写回 session_state，
-    所以 `disabled=not text.strip()` 在打字过程中永远看到旧值——
-    按钮一直灰着，用户必须先点一下输入框外面才能提交。这是被使用者当场发现的。
+    text_area 要等失焦（或 Ctrl+Enter）才写回 session_state，
+    所以 `disabled=not text.strip()` 在打字过程中永远看到旧值 ——
+    按钮一直灰着，用户必须先点一下输入框外面才能提交。
     """
     btn = [b for b in app.button if b.label == "提交问题"][0]
     assert not btn.disabled, "输入框为空时按钮也不该禁用，否则用户输入后它仍然是灰的"
@@ -107,26 +117,27 @@ def test_empty_submit_warns_instead_of_crashing(app):
     assert any("请先填写问题内容" in w.value for w in app.warning)
 
 
-def test_approve_requires_confirmation(app):
-    """老师端「通过并入库」必须先勾选确认。
+def test_teacher_view_appears_in_same_page(app):
+    """切到老师身份后，同一页里必须出现待办控件 —— 不再有"老师端"这个页面。
 
-    这是把 AI 草稿转成正式答复的语义操作，误点等于让未经审阅的内容入库。
-    用 checkbox 而不是弹窗：勾选即时生效，不踩 text_area 失焦那个坑。
+    这是合并答疑台与老师端的验收点：身份一换，02 区块整个变形。
     """
-    app.switch_page("pages/2_老师端.py")
-    app.run()
-    # 先切页面再切身份：以学生身份打开老师端会走到 st.stop()，
-    # 在 stop 之后的会话里再切页容易不生效，顺序反过来最稳。
-    role = [r for r in app.radio if r.key == "actor_role_widget"][0]
-    role.set_value("老师")
-    app.run()
+    _switch_role(app, "老师")
+    assert app.session_state.get("actor_role") == "老师"
 
     ok = [b for b in app.button if b.label == "通过并入库"]
-    assert ok, "老师端应有待办"
-    assert all(b.disabled for b in ok), "未勾选时「通过并入库」必须禁用"
+    assert ok, "切到老师身份后，同一页里应该出现待办"
+    assert all(b.disabled for b in ok), "未勾选「我已核对」时「通过并入库」必须禁用"
 
     chk = [c for c in app.checkbox if c.label.startswith("我已核对")][0]
     chk.check()
     app.run()
     ok = [b for b in app.button if b.label == "通过并入库"]
     assert not ok[0].disabled, "勾选后应可点击"
+
+
+def test_student_view_has_no_teacher_tools(app):
+    """学生身份下不该出现「通过并入库」—— 两套视图不能同时渲染。"""
+    assert app.session_state.get("actor_role") == "学生"
+    assert not [b for b in app.button if b.label == "通过并入库"]
+    assert [b for b in app.button if b.label == "提交问题"]

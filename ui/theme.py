@@ -142,10 +142,11 @@ span[class*="material-icons"],
    注意选择器层级：stVerticalBlock 的**直接父级**就是 stMainBlockContainer，
    中间没有再套 div。之前按 `> div > div >` 写，整段没命中，
    于是 gap 一直是 15px，顶栏永远差那条缝。 */
-[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"],
-[data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"] {
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {
   padding-left: clamp(12px, 1.9vw, 30px);
   padding-right: clamp(12px, 1.9vw, 30px);
+  /* 单页化之后顶栏 + 章节导航都改成 fixed，正文要让出 84px */
+  padding-top: 84px;
   /* 1.66 的纵向排布用的是 flex gap，不是 margin ——
      gap 不清零的话，第一行会被推下 15px，顶栏就贴不住。 */
   gap: 0 !important;
@@ -158,14 +159,10 @@ span[class*="material-icons"],
    它自己不可见，但上一行给的 margin-bottom 会变成实打实的 14px 空隙 ——
    顶栏就永远差那一条。所以首个子元素不给下边距。 */
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
-  > [data-testid="stElementContainer"]:first-child,
-[data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"]
   > [data-testid="stElementContainer"]:first-child {
   margin-bottom: 0 !important;
 }
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
-  > [data-testid="stElementContainer"]:last-child,
-[data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"]
   > [data-testid="stElementContainer"]:last-child {
   margin-bottom: 0;
 }
@@ -206,21 +203,99 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
 [data-testid="stSidebarCollapsedControl"] { display: none !important; }
 [data-testid="stHeader"] { background: transparent !important; }
 
-/* 首页专用：让主卡吃掉剩余视口高度。
-   否则内容只有 ~640px，900px 屏幕下面空 260px，看上去像没做完。
-   用 :has(.cv) 把规则限定在首页，不影响其它页面。 */
-[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]:has(.cv) {
-  min-height: 100vh;
+/* ── 单页：章节导航 + 锚点 + 一屏一区 ───────────────────── */
+/* 顶栏和导航都用 fixed，不用 sticky：Streamlit 把每个元素包在独立的
+   stElementContainer 里，父容器高度就等于元素本身，sticky 没有可滑动余量，写了不生效。 */
+.tb-nav {
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 44px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.4vw, 22px);
+  padding: 0 clamp(12px, 1.9vw, 30px);
+  background: var(--tb-bg);
+  border-bottom: 2px solid var(--tb-ink);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tb-nav::-webkit-scrollbar { display: none; }
+.tb-nav a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 0;
+  white-space: nowrap;
+  text-decoration: none;
+  border-bottom: none;
+  color: var(--tb-ink-3);
+  font-size: clamp(11px, 0.95vw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.tb-nav a .no {
+  font-family: __MONO__;
+  font-size: clamp(7px, 0.6vw, 8.5px);
+  letter-spacing: 0.14em;
+  color: var(--tb-ink-3);
+}
+.tb-nav a .en {
+  font-family: __MONO__;
+  font-size: clamp(6px, 0.5vw, 7.5px);
+  letter-spacing: 0.16em;
+  color: var(--tb-ink-3);
+  text-transform: uppercase;
+}
+.tb-nav a:hover { color: var(--tb-ink); }
+
+/* 锚点目标：滚动到位时给固定头让出 88px，否则区块标题会被压在导航条底下 */
+.tb-anchor {
+  display: block;
+  height: 0;
+  overflow: hidden;
+  scroll-margin-top: 88px;
+}
+
+/* 一屏一区：内容少的正好一屏，内容多的自然延长（min-height 不是固定高度） */
+[class*="st-key-sec-"] {
+  min-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
+  padding-bottom: clamp(18px, 3vh, 40px);
 }
-[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]:has(.cv)
-  > [data-testid="stElementContainer"]:has(.cv) {
-  flex: 1 1 auto;
+
+/* ── 区块标头（单页每个 section 一个）─────────────────── */
+.tb-sechead { margin: 0 0 clamp(10px, 1.4vw, 18px); }
+.sh-top { display: flex; align-items: baseline; gap: 10px; }
+.sh-no {
+  font-family: __MONO__;
+  font-size: clamp(9px, 0.8vw, 11px);
+  letter-spacing: 0.16em;
+  color: var(--tb-red);
 }
-[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]:has(.cv)
-  > [data-testid="stElementContainer"]:has(.cv) .cv {
-  height: 100%;
+.sh-en {
+  font-family: __MONO__;
+  font-size: clamp(7px, 0.6vw, 8.5px);
+  letter-spacing: 0.2em;
+  color: var(--tb-ink-3);
+  text-transform: uppercase;
+}
+.sh-title {
+  font-size: clamp(22px, 2.6vw, 36px) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 6px 0 0 !important;
+}
+.sh-desc {
+  font-size: clamp(11.5px, 0.95vw, 13.5px) !important;
+  color: var(--tb-ink-2) !important;
+  line-height: 1.7 !important;
+  margin: 6px 0 0 !important;
+  max-width: 62ch;
 }
 
 /* 入口文件必须叫 app.py（云端 Main file path 写死了这个路径），
@@ -520,9 +595,13 @@ div[data-testid="stVerticalBlockBorderWrapper"],
   background: var(--tb-ink);
   height: 40px;
   padding: 0 clamp(12px, 1.9vw, 30px);
-  /* 左右负 margin 抵消正文边距，让黑条通到窗口边缘；
-     纵向间距交给父级统一控制，这里不再自加 margin-bottom（会与父级叠加） */
-  margin: 0 calc(-1 * clamp(12px, 1.9vw, 30px));
+  /* 单页化之后顶栏常驻窗口顶部 —— 滚到任何一段都还能看到"这是哪个系统、我是谁" */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  margin: 0;
 }
 .tb-topbar .left { display: flex; align-items: center; gap: 11px; }
 .tb-topbar .brand { font-size: 8px; letter-spacing: 0.26em; color: #F2F1EC; font-family: __MONO__; }
