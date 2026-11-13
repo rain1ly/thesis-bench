@@ -5,6 +5,7 @@
 """
 import streamlit as st
 
+from core import identity
 from core.ai_client import load_config, ping
 from datetime import date
 
@@ -12,7 +13,10 @@ from ui import components, theme
 
 theme.inject()
 
+actor = identity.render_switcher()
+
 components.topbar(page="SYS / 自检", date=date.today().strftime("%Y.%m.%d"))
+components.identity_chip(actor, "SYS")
 components.hero(
     "环境自检",
     "密钥到底通没通",

@@ -11,6 +11,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from core import identity
 from core.checker import run_all, summary
 from core.parser import parse_docx
 from ui import components, theme
@@ -18,10 +19,15 @@ from ui import components, theme
 st.set_page_config(page_title="写作台 · 论文工坊", layout="wide", page_icon="◧")
 theme.inject()
 
+# 身份切换器：顶栏那个方框切换后要靠它消费 _actor_pending，
+# 否则只有首页切得动，进内页又跳回原身份。
+actor = identity.render_switcher()
+
 components.topbar(
     page="04 / 05",
     date=date.today().strftime("%Y.%m.%d"),
 )
+components.identity_chip(actor, "04 / 05")
 
 components.hero(
     "② 写作台 · 规则诊断",

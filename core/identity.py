@@ -165,7 +165,14 @@ def render_switcher() -> Actor:
     # 所以这里用「挂起标记」，在本函数里、控件创建**之前**消费掉。
     pending = st.session_state.pop("_actor_pending", None)
     if pending:
-        st.session_state[role_key], st.session_state[name_key] = pending
+        p_role, p_name = pending
+        st.session_state[role_key] = p_role
+        if p_name:
+            st.session_state[name_key] = p_name
+        else:
+            # 只切角色（顶栏方框里改角色那一下）：清掉名字，
+            # 交给下面的"值不在名单里就取第一个"兜底，选新名单的第一个人
+            st.session_state.pop(name_key, None)
 
     with st.sidebar:
         st.divider()

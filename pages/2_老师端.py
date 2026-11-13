@@ -28,6 +28,7 @@ components.topbar(
     who=actor.label, page="03 / 05",
     date=date.today().strftime("%Y.%m.%d"),
 )
+components.identity_chip(actor, "03 / 05")
 
 components.hero(
     "① 答疑台 · 老师端",

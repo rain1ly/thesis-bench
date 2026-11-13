@@ -36,22 +36,15 @@ def status_tone(status: str) -> str:
 
 
 def topbar(who: str = "", page: str = "", date: str = "") -> None:
-    """顶栏黑条：左标识 + 右身份页码。
+    """顶栏黑条：左侧标识 + 日期。
 
-    身份那块是可交互记号（亮描边 + 底色 + 箭头）。落地时必须真绑动作，
-    否则就是假按钮 —— 点一下没反应，比不做成按钮更伤。
+    右端**故意不画方框**：那个方框必须是真控件（点开能切身份），
+    纯 HTML 画出来的"亮描边 + 箭头"会让用户以为能点，点了却没反应。
+    右端的身份方框由 identity_chip() 用 st.popover 浮上去，
+    参数 who / page 保留只为调用方兼容，实际渲染在 identity_chip 里。
     """
     import streamlit as st
 
-    right = ""
-    if who or page:
-        right = (
-            '<div class="tb-chip">'
-            f'<span class="who">{_esc(who)}</span>'
-            f'<span class="page">{_esc(page)}</span>'
-            '<span class="go">↗</span>'
-            "</div>"
-        )
     st.markdown(
         f"""<div class="tb-topbar">
   <div class="left">
@@ -60,10 +53,73 @@ def topbar(who: str = "", page: str = "", date: str = "") -> None:
     <span class="dim">论文工坊</span>
     <span class="faint">{_esc(date)}</span>
   </div>
-  {right}
 </div>""",
         unsafe_allow_html=True,
     )
+
+
+def identity_chip(actor=None, page: str = "") -> None:
+    """顶栏右端的身份方框 —— 真的能点，点开就是切换器。
+
+    为什么单独一个函数：Streamlit 的控件不能塞进 HTML 块，
+    所以它只能用 fixed 定位浮在黑条右端（见 theme.py）。
+
+    **两个必须记住的坑：**
+    1. 不能在渲染时比较"控件值 ≠ 当前身份"然后自动切换 ——
+       popover 里的控件即使关着也会每轮执行，于是侧边栏切了人之后，
+       这里发现 popover 还停在旧名字，就把身份又改回去，形成互相打架。
+       所以只用 on_change 回调。
+    2. 控件 key 必须带上当前身份（`pop_name_学生_陈同学`）。
+       key 一旦写死，切人之后控件仍持有旧值，同样会把身份拉回去；
+       带上身份之后，人一变 key 就变，控件自然用新身份重新初始化。
+    """
+    import streamlit as st
+
+    from core import identity as identity_mod
+
+    # 没传 actor 的页面（写作台等不涉及身份的页）也能显示，取当前会话身份
+    actor = actor or identity_mod.current()
+    label = f"{actor.label}　{page}".strip()
+
+    role_k = f"pop_role_{actor.role}"
+    name_k = f"pop_name_{actor.role}_{actor.name}"
+
+    def _on_role() -> None:
+        # 只切角色，名字留空 —— 由 render_switcher 兜底成新名单的第一个
+        st.session_state["_actor_pending"] = (st.session_state.get(role_k, actor.role), "")
+
+    def _on_name() -> None:
+        st.session_state["_actor_pending"] = (
+            st.session_state.get(role_k, actor.role),
+            st.session_state.get(name_k, actor.name),
+        )
+
+    # 不加 icon：`:material/` 图标在 popover 按钮里可能被渲染成图标名字面量
+    # （Material Symbols 靠连字，一旦字体没加载完就会露出 swap_horiz 这种原文）。
+    with st.popover(label, key="identity_pop"):
+        st.caption("演示版用身份切换代替登录；生产环境接学校统一认证。")
+        role = st.radio(
+            "角色",
+            identity_mod.ROLES,
+            index=identity_mod.ROLES.index(actor.role),
+            horizontal=True,
+            label_visibility="collapsed",
+            key=role_k,
+            on_change=_on_role,
+        )
+        pool = (
+            identity_mod.student_names()
+            if role == "学生"
+            else identity_mod.teacher_names()
+        )
+        st.selectbox(
+            "姓名",
+            pool,
+            index=pool.index(actor.name) if actor.name in pool else 0,
+            key=name_k,
+            label_visibility="collapsed",
+            on_change=_on_name,
+        )
 
 
 def hero(

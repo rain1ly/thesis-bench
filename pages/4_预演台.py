@@ -25,17 +25,20 @@ import time
 import pandas as pd
 import streamlit as st
 
-from core import bootstrap, qa_store, rehearsal, rehearsal_store
+from core import bootstrap, identity, qa_store, rehearsal, rehearsal_store
 from core.ai_client import STREAM_ERROR_MARK, chat_stream, load_config
 from ui import components, theme
 
 theme.inject()
 bootstrap.ensure_demo()
 
+actor = identity.render_switcher()
+
 components.topbar(
     page="05 / 05",
     date=date.today().strftime("%Y.%m.%d"),
 )
+components.identity_chip(actor, "05 / 05")
 
 components.hero(
     "③ 预演台",

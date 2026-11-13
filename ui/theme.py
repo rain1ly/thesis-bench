@@ -115,10 +115,33 @@ span[class*="material-icons"],
   letter-spacing: normal !important;
 }
 
+/* ── 布局：贴顶、全宽、跟随缩放 ─────────────────────────── */
+/* 三条都是被用户当场指出来的：
+   1) 顶栏上方有 32px 白边 —— stHeader 默认占位，压成 0；
+   2) 内容被 max-width:1260px 关在中间，浏览器放大后两侧全是白边；
+   3) 缩放后字号不变但可用宽度变小，排版直接崩 —— 所以边距用 clamp 跟随视口。 */
+[data-testid="stHeader"] {
+  height: 0 !important;
+  min-height: 0 !important;
+  background: transparent !important;
+}
+/* 光把 stHeader 压成 0 还不够：外层还有两道默认 padding，
+   留着就是那 30 多像素白边（用户说的"没贴死浏览器上方"）。 */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+[data-testid="stMainBlockContainer"],
 .block-container {
-  padding-top: 1.6rem;
-  padding-bottom: 3rem;
-  max-width: 1260px;
+  padding: 0 0 2.5rem !important;
+  max-width: 100% !important;
+}
+/* 内边距放在这一层，顶栏用负 margin 顶出去 —— 这样黑条贴边，正文仍有边距 */
+[data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"] {
+  padding-left: clamp(12px, 1.9vw, 30px);
+  padding-right: clamp(12px, 1.9vw, 30px);
 }
 
 h1, h2, h3, h4 { color: var(--tb-ink); }
@@ -442,36 +465,84 @@ div[data-testid="stVerticalBlockBorderWrapper"],
 
 /* ══ 自定义组件（.tb-*）════════════════════════════════════ */
 
-/* 顶栏：黑条 + 两端信息 */
+/* 顶栏：黑条贴死页面边缘（负 margin 抵消正文边距），高度固定 40px */
 .tb-topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: var(--tb-ink);
-  padding: 5px 14px;
-  margin-bottom: 14px;
+  height: 40px;
+  padding: 0 clamp(12px, 1.9vw, 30px);
+  margin: 0 calc(-1 * clamp(12px, 1.9vw, 30px)) 16px;
 }
 .tb-topbar .left { display: flex; align-items: center; gap: 11px; }
-.tb-topbar .brand { font-size: 7px; letter-spacing: 0.26em; color: #F2F1EC; font-family: __MONO__; }
+.tb-topbar .brand { font-size: 8px; letter-spacing: 0.26em; color: #F2F1EC; font-family: __MONO__; }
 .tb-topbar .sep { width: 1px; height: 8px; background: #3A3A3A; }
-.tb-topbar .dim { font-size: 7px; letter-spacing: 0.26em; color: #6E6E6E; font-family: __MONO__; }
-.tb-topbar .faint { font-size: 7px; letter-spacing: 0.26em; color: #4E4E4E; font-family: __MONO__; }
+.tb-topbar .dim { font-size: 8px; letter-spacing: 0.26em; color: #6E6E6E; font-family: __MONO__; }
+.tb-topbar .faint { font-size: 8px; letter-spacing: 0.26em; color: #4E4E4E; font-family: __MONO__; }
 
-/* 身份方框：可交互记号（亮描边 + 提亮底色 + 箭头） */
-.tb-chip {
+/* ── 身份方框：真控件（popover），浮在顶栏右端 ─────────────── */
+/* 为什么不用纯 HTML：那个 ↗ 看着能点，点了却什么都不发生，等于假按钮。
+   改成 st.popover 之后点开就是身份切换器。
+   定位用 fixed 而不是负 margin —— 负 margin 只是"看起来在上面"，
+   元素仍占文档流，一旦 popover 内部有高度就会把顶栏文字顶下去，
+   出现"黑条空着、文字跑到条下面"的错位。 */
+[class*="st-key-identity_pop"] {
+  position: fixed !important;
+  top: 7px !important;
+  right: clamp(12px, 1.9vw, 30px) !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: 1000000 !important;
+}
+[class*="st-key-identity_pop"] [data-testid="stPopover"] { display: inline-block; }
+[class*="st-key-identity_pop"] button {
+  height: 26px !important;
+  min-height: 26px !important;
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  border: 1px solid rgba(255,255,255,0.26);
-  border-radius: 4px;
-  padding: 4px 11px;
-  background: rgba(255,255,255,0.10);
-  cursor: pointer;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+  border-radius: 4px !important;
+  background: rgba(255, 255, 255, 0.10) !important;
+  padding: 0 11px !important;
+  margin: 0 !important;
 }
-.tb-chip .who { font-size: 8px; letter-spacing: 0.28em; color: #C4C4C4; }
-.tb-chip .page { font-size: 8.5px; letter-spacing: 0.24em; color: #7FB6C4; font-family: __MONO__; }
-.tb-chip .go { font-size: 9px; color: #7FB6C4; line-height: 1; }
-.tb-chip:hover { border-color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.16); }
+[class*="st-key-identity_pop"] button:hover {
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+/* 只改文字所在的 <p>，**不要用 span 通配** ——
+   popover 按钮里还有一个承载图标的 <span data-testid="stIconMaterial">，
+   字体一被换成等宽，Material Symbols 的连字失效，界面上会露出
+   `keyboard_double_arrow_right` 这种图标名字面量。这个坑犯过两次了。 */
+[class*="st-key-identity_pop"] button p {
+  color: #C4C4C4 !important;
+  font-size: 9px !important;
+  letter-spacing: 0.26em !important;
+  font-family: __MONO__ !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+/* 图标必须留在图标字体里，并显式开连字 */
+[class*="st-key-identity_pop"] [data-testid="stIconMaterial"] {
+  font-family: "Material Symbols Rounded", "Material Icons" !important;
+  font-feature-settings: "liga" 1 !important;
+  -webkit-font-feature-settings: "liga" 1 !important;
+  font-size: 14px !important;
+  color: #7FB6C4 !important;
+  letter-spacing: normal !important;
+}
+/* 弹层本身也要跟着这套语言：默认是白底大圆角 + 柔和阴影，
+   在这张黑白纸感的页面上像个贴上去的便签。改成直角 + 2px 黑框 + 硬阴影。 */
+[data-testid="stPopoverBody"] {
+  border-radius: 0 !important;
+  border: 2px solid var(--tb-ink) !important;
+  background: var(--tb-surface) !important;
+  box-shadow: 5px 5px 0 rgba(17, 17, 17, 0.14) !important;
+}
+/* 箭头交给 popover 自带的 chevron：它表示"点开"，比 ↗（表示"跳走"）更准确。
+   之前自己画过一个伪元素箭头，结果和 chevron 并排出现两个箭头。 */
 
 /* 页头：小标签 + 超粗标题 + 2px 黑线 */
 .tb-hero { margin-bottom: 18px; }
