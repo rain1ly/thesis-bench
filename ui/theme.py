@@ -401,13 +401,18 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
 .tb-check::after {
   content: "";
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 19.8px;
-  height: 0;
-  border-top: 1.5px solid var(--tb-ink);
-  transform-origin: top right;
-  transform: rotate(-45deg);
+  /* 补偿 border：absolute 的 top/right 从 padding box 起算，clip-path 从 border box 切 */
+  top: -1.5px;
+  right: -1.5px;
+  width: 14px;
+  height: 14px;
+  /* to top right 的 50% 色带 = 左上→右下的对角线 "\"，正好压在 clip-path 的斜边上；
+     斜线外侧一半被裁掉，内侧保留约 1px，与首页 .cv-angle 的 SVG 同效 */
+  background: linear-gradient(to top right,
+      transparent calc(50% - 1px),
+      var(--tb-ink) calc(50% - 1px),
+      var(--tb-ink) calc(50% + 1px),
+      transparent calc(50% + 1px));
   pointer-events: none;
 }
 .tb-check .c-top { display: flex; justify-content: space-between; align-items: baseline; }
@@ -610,13 +615,18 @@ div[data-testid="stVerticalBlockBorderWrapper"],
 [class*="st-key-card-"]::after {
   content: "";
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 31.1px;              /* 22 × √2 */
-  height: 0;
-  border-top: 2px solid var(--tb-ink);
-  transform-origin: top right;
-  transform: rotate(-45deg);
+  /* 补偿 border：absolute 的 top/right 从 padding box 起算，clip-path 从 border box 切 */
+  top: -2px;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  /* to top right 的 50% 色带 = 左上→右下的对角线 "\"，正好压在 clip-path 的斜边上；
+     斜线外侧一半被裁掉，内侧保留约 1px，与首页 .cv-angle 的 SVG 同效 */
+  background: linear-gradient(to top right,
+      transparent calc(50% - 1px),
+      var(--tb-ink) calc(50% - 1px),
+      var(--tb-ink) calc(50% + 1px),
+      transparent calc(50% + 1px));
   pointer-events: none;
 }
 
@@ -1014,13 +1024,18 @@ div[data-testid="stVerticalBlockBorderWrapper"],
 .tb-kpi::after {
   content: "";
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 19.8px;
-  height: 0;
-  border-top: 1.5px solid var(--tb-ink);
-  transform-origin: top right;
-  transform: rotate(-45deg);
+  /* 补偿 border：absolute 的 top/right 从 padding box 起算，clip-path 从 border box 切 */
+  top: -1.5px;
+  right: -1.5px;
+  width: 14px;
+  height: 14px;
+  /* to top right 的 50% 色带 = 左上→右下的对角线 "\"，正好压在 clip-path 的斜边上；
+     斜线外侧一半被裁掉，内侧保留约 1px，与首页 .cv-angle 的 SVG 同效 */
+  background: linear-gradient(to top right,
+      transparent calc(50% - 1px),
+      var(--tb-ink) calc(50% - 1px),
+      var(--tb-ink) calc(50% + 1px),
+      transparent calc(50% + 1px));
   pointer-events: none;
 }
 .tb-kpi .k-top { display: flex; justify-content: space-between; align-items: baseline; }
