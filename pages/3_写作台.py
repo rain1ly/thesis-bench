@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
@@ -15,6 +17,11 @@ from ui import components, theme
 
 st.set_page_config(page_title="写作台 · 论文工坊", layout="wide", page_icon="◧")
 theme.inject()
+
+components.topbar(
+    page="04 / 05",
+    date=date.today().strftime("%Y.%m.%d"),
+)
 
 components.hero(
     "② 写作台 · 规则诊断",

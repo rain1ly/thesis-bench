@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import time
 
 import pandas as pd
@@ -29,6 +31,11 @@ from ui import components, theme
 
 theme.inject()
 bootstrap.ensure_demo()
+
+components.topbar(
+    page="05 / 05",
+    date=date.today().strftime("%Y.%m.%d"),
+)
 
 components.hero(
     "③ 预演台",

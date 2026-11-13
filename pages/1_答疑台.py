@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
@@ -48,6 +50,11 @@ def build_prompt(thesis: str, student: str, stage: str, category: str, question:
 theme.inject()
 bootstrap.ensure_demo()
 actor = identity.render_switcher()
+
+components.topbar(
+    who=actor.label, page="02 / 05",
+    date=date.today().strftime("%Y.%m.%d"),
+)
 
 components.hero(
     "① 答疑台 · 学生端",
