@@ -28,6 +28,13 @@ CSS = """
   position: relative;
   background: #FFFFFF;
   border: 2px solid #111111;
+  /* 撑满主要视线高度：内容自然高度只有 ~700px，900px 视口里下面会空一大块。
+     min-height + 链条贴底，正好复刻设计稿"标题在上、链条在下、中间留白"的构图。 */
+  /* 主卡吃掉一屏的主要高度：46vh 在 900 屏幕上约 414px，
+     加上下方待办条和状态栏，整页正好填满一屏，不留大片空白 */
+  min-height: clamp(300px, 58vh, 620px);
+  display: flex;
+  flex-direction: column;
   /* 右上角切角 30px。clip-path 会连 border 一起裁，所以斜线由 .cv-angle 的 svg 补 */
   clip-path: polygon(0 0, calc(100% - 30px) 0, 100% 30px, 100% 100%, 0 100%);
 }
@@ -35,7 +42,12 @@ CSS = """
   position: absolute; top: 0; right: 0;
   width: 30px; height: 30px; pointer-events: none;
 }
-.cv-body { padding: clamp(16px, 2.2vw, 32px) clamp(16px, 2.4vw, 34px) 0; }
+.cv-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(16px, 2.2vw, 32px) clamp(16px, 2.4vw, 34px) 0;
+}
 
 /* 右上天元数据：必须避开切角 —— 右边界退到 30 + 8 = 38px 之内 */
 .cv-meta {
@@ -87,22 +99,19 @@ CSS = """
   text-transform: uppercase;
 }
 
-/* 三段链条 */
+/* 三段链条：margin-top:auto 把它压到卡片底部，上方留白自然撑开 ——
+   这是设计稿的构图，不是"没排满" */
 .cv-chain {
   display: flex;
   gap: clamp(8px, 1.4vw, 22px);
   border-top: 2px solid #111111;
-  margin-top: clamp(14px, 1.9vw, 26px);
+  margin-top: auto;
   padding: clamp(12px, 1.5vw, 18px) 0 clamp(14px, 1.8vw, 22px);
 }
-.cv-node { flex: 1 1 0; min-width: 0; text-decoration: none; color: inherit; }
-/* 全局 `a { color: ink }` 敌不过浏览器给未访问链���的默认蓝，
-   这里显式压掉，否则三个节点标题会变成蓝色链接 —— 在一张黑白纸感版面上非常刺眼 */
-.cv a, .cv a:link, .cv a:visited, .cv-node, .cv-node:link, .cv-node:visited {
-  color: #111111 !important;
-  text-decoration: none !important;
-}
-.cv-node:hover .n-name { text-decoration: underline; text-underline-offset: 3px; }
+/* 节点不包 <a>：`<a href>` 会让浏览器整页重新加载，点一下白屏闪一下，
+   像是"跳去了另一个网站"。真正的入口是卡片下面那行 st.page_link，
+   走 Streamlit 前端路由，无刷新。 */
+.cv-node { flex: 1 1 0; min-width: 0; }
 .n-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .n-no {
   font-family: __MONO__; font-size: clamp(8px, 0.72vw, 10px);
@@ -133,7 +142,12 @@ CSS = """
 }
 
 /* 下排：圆环 + 待办队列 */
-.cv-row { display: flex; gap: clamp(8px, 1.1vw, 14px); margin-top: clamp(8px, 1.1vw, 14px); flex-wrap: wrap; }
+.cv-row {
+  display: flex; gap: clamp(8px, 1.1vw, 14px);
+  margin-top: clamp(8px, 1.1vw, 14px);
+  min-height: clamp(132px, 18vh, 190px);
+  flex-wrap: wrap;
+}
 .cv-ring {
   flex: 0 0 clamp(132px, 15vw, 196px);
   background: #FFFFFF; border: 2px solid #111111;
@@ -157,6 +171,7 @@ CSS = """
 
 .cv-queue {
   flex: 1 1 clamp(280px, 46vw, 640px); min-width: 0;
+  display: flex; flex-direction: column;
   background: #FFFFFF; border: 2px solid #111111;
   clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
   position: relative;
@@ -178,6 +193,8 @@ CSS = """
   font-size: clamp(9px, 0.86vw, 12px);
 }
 .q-row:last-child { border-bottom: none; }
+/* 待办只有两三条时，行会在框底留白；让每行均分剩余高度，框子看起来才是"排满的" */
+.q-row { flex: 1 1 auto; }
 .q-row .t { font-family: __MONO__; font-size: clamp(7px, 0.62vw, 9px); color: #6B6B6B; letter-spacing: 0.08em; }
 .q-row .w { font-family: __MONO__; font-size: clamp(7px, 0.62vw, 9px); color: #E30613; letter-spacing: 0.08em; }
 .q-row .who { font-weight: 700; white-space: nowrap; }
@@ -207,7 +224,7 @@ CSS = """
   padding: 2px 9px; font-weight: 700; text-decoration: none;
   letter-spacing: 0.18em; white-space: nowrap;
 }
-.cv-strip .enter:link, .cv-strip .enter:visited { color: #111111 !important; text-decoration: none; }
+
 
 /* 状态栏 */
 .cv-foot {
@@ -237,6 +254,7 @@ def render(
     coverage: int,
     queue: list[dict],
     foot: list[str],
+    queue_title: str = "待我处理",
     page: str = "01 / 05",
     demo: bool = False,
 ) -> None:
@@ -264,13 +282,13 @@ def render(
         if i:
             nodes.append('<div class="n-arrow">→</div>')
         nodes.append(
-            f'<a class="cv-node" href="{_e(n.get("href", "#"))}">'
+            f'<div class="cv-node">'
             f'<div class="n-head"><span class="n-no">{_e(n.get("no", ""))}</span>'
             f'<span class="n-en">{_e(n.get("en", ""))}</span></div>'
             f'<div class="n-name">{_e(n.get("name", ""))}</div>'
             f'<div class="n-nums">{_e(n.get("nums", ""))}</div>'
             f'<div class="n-desc">{_e(n.get("desc", ""))}</div>'
-            "</a>"
+            "</div>"
         )
 
     rows = []
@@ -337,7 +355,7 @@ def render(
   <div class="cv-queue">
     {angle_sm}
     <div class="q-head">
-      <span>PENDING QUEUE</span><span>／ 待我处理 <b>{len(queue):02d}</b></span>
+      <span>PENDING QUEUE</span><span>／ {_e(queue_title)} <b>{len(queue):02d}</b></span>
       <span class="sort">SORT ／ PRIVATE FIRST</span>
     </div>
     {"".join(rows)}
@@ -349,7 +367,7 @@ def render(
   <span>CUT CORNER = CLICKABLE</span><span>/</span>
   <span>WIDE TRACKING, BOLD CHINESE</span><span>/</span>
   <span>ONE SIGNAL RED</span>
-  <a class="enter" href="/预演台">ENTER ↗</a>
+  <span class="enter">ENTER ↗</span>
 </div>
 
 <div class="cv-foot">{foot_html}<span class="page">PAGE {_e(page)}</span></div>

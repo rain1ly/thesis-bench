@@ -112,13 +112,22 @@ n_files, n_issues, n_severe = sample_stat()
 if qa["total"] == 0:
     components.empty("答疑库是空的", "去「答疑台」载入示例数据，或直接以学生身份提第一个问题。")
 
-# 待办队列跟着身份走：老师看自己的待办，学生看自己还没被答复的问题
+# 首页所有"我的"数字都跟着身份走 ——
+# 只让右下角队列变的话，切完身份整页看上去几乎没动静，像是装饰。
 if actor.is_teacher:
-    queue_rows = identity.inbox(all_records, actor.name)[:3]
+    _mine = identity.inbox(all_records, actor.name)
+    _pool = identity.public_pool(all_records)
+    queue_rows = _mine[:3]
+    qa_nums = f"待我处理 {len(_mine):02d} ／ 公开池 {len(_pool):02d}"
+    queue_title = "待我处理"
+    my_label, my_value = "待我处理", len(_mine)
 else:
-    queue_rows = [
-        r for r in all_records if r.student == actor.name and not r.final_answer
-    ][:3]
+    _own = [r for r in all_records if r.student == actor.name]
+    _waiting = [r for r in _own if not r.final_answer]
+    queue_rows = _waiting[:3]
+    qa_nums = f"我的提问 {len(_own):02d} ／ 待答 {len(_waiting):02d}"
+    queue_title = "我的待答"
+    my_label, my_value = "我的提问", len(_own)
 
 coverage = int(round(reh["coverage"] * 100)) if reh["points_total"] else 0
 
@@ -130,7 +139,7 @@ home_view.render(
             "no": "01",
             "name": "答疑台",
             "en": "QA SYSTEM",
-            "nums": f"{qa['total']} REC ／ {qa['待审核']:02d} PEND",
+            "nums": qa_nums,
             "desc": "分类、交给谁、公开或隐私。AI 起草，导师改完才入库。这一层沉淀下来的困惑，是下面两层的输入。",
             "href": "/答疑台",
         },
@@ -157,9 +166,11 @@ home_view.render(
     ],
     coverage=coverage,
     queue=[_queue_item(r) for r in queue_rows],
+    queue_title=queue_title,
     foot=[
         f"TC {datetime.now().strftime('%H:%M:%S')}",
         f"REC {qa['total']}",
+        f"{my_label} {my_value}",
         f"STU {len({r.student for r in all_records})}",
         f"TCH {len(identity.teacher_names())}",
         f"HIGH {high_risks}",
@@ -169,6 +180,19 @@ home_view.render(
     page="01 / 05",
     demo=bootstrap.is_demo(),
 )
+
+# 三个入口放在最底部：它们走 Streamlit 前端路由（无刷新），
+# 但插在卡片和大黑条之间会打断"主卡 → 待办 → 状态栏"的版式节奏。
+st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+_l1, _l2, _l3, _l4 = st.columns([1, 1, 1, 2], gap="small")
+with _l1:
+    st.page_link("pages/1_答疑台.py", label="答疑台 →")
+with _l2:
+    st.page_link("pages/3_写作台.py", label="写作台 →")
+with _l3:
+    st.page_link("pages/4_预演台.py", label="预演台 →")
+with _l4:
+    st.page_link("pages/2_老师端.py", label="老师端 →")
 
 with st.expander("数据来源与清空"):
     if bootstrap.is_demo():

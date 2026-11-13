@@ -193,6 +193,13 @@ def render_switcher() -> Actor:
         st.session_state["actor_name"] = name
         st.caption("演示版用身份切换代替登录；生产环境接学校统一认证。")
 
+    # 身份真的变了才提示。没有这个反馈时，用户从顶栏切完只看到页面闪一下，
+    # 很难判断"到底切没切"—— 尤其两个身份的界面结构长得很像。
+    _last = st.session_state.get("_actor_last")
+    if _last and _last != (role, name):
+        st.toast(f"已切换：{role} · {name}")
+    st.session_state["_actor_last"] = (role, name)
+
     return Actor(role=role, name=name)
 
 

@@ -138,10 +138,36 @@ span[class*="material-icons"],
   padding: 0 0 2.5rem !important;
   max-width: 100% !important;
 }
-/* 内边距放在这一层，顶栏用负 margin 顶出去 —— 这样黑条贴边，正文仍有边距 */
+/* 内边距放在这一层，顶栏用负 margin 顶出去 —— 这样黑条贴边，正文仍有边距。
+   注意选择器层级：stVerticalBlock 的**直接父级**就是 stMainBlockContainer，
+   中间没有再套 div。之前按 `> div > div >` 写，整段没命中，
+   于是 gap 一直是 15px，顶栏永远差那条缝。 */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"],
 [data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"] {
   padding-left: clamp(12px, 1.9vw, 30px);
   padding-right: clamp(12px, 1.9vw, 30px);
+  /* 1.66 的纵向排布用的是 flex gap，不是 margin ——
+     gap 不清零的话，第一行会被推下 15px，顶栏就贴不住。 */
+  gap: 0 !important;
+}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
+  > [data-testid="stElementContainer"] {
+  margin-bottom: 14px;
+}
+/* Streamlit 在正文最前面塞了一个高度为 0 的占位容器（logo 位）。
+   它自己不可见，但上一行给的 margin-bottom 会变成实打实的 14px 空隙 ——
+   顶栏就永远差那一条。所以首个子元素不给下边距。 */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
+  > [data-testid="stElementContainer"]:first-child,
+[data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"]
+  > [data-testid="stElementContainer"]:first-child {
+  margin-bottom: 0 !important;
+}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
+  > [data-testid="stElementContainer"]:last-child,
+[data-testid="stMainBlockContainer"] > div > div > [data-testid="stVerticalBlock"]
+  > [data-testid="stElementContainer"]:last-child {
+  margin-bottom: 0;
 }
 
 h1, h2, h3, h4 { color: var(--tb-ink); }
@@ -174,7 +200,28 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
 [data-testid="stStatusWidget"] { display: none !important; }
 /* 元素悬停时右上角浮出的"下载/全屏"工具栏 —— 鼠标扫过会闪，录屏时尤其刺眼 */
 [data-testid="stElementToolbar"] { display: none !important; }
+/* 侧边栏折叠按钮是 fixed 定位，钉在窗口左上角。顶栏贴顶之后它正好压在黑条上，
+   露出一个 "»" 符号。演示时不需要折叠侧边栏，直接隐藏。 */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] { display: none !important; }
 [data-testid="stHeader"] { background: transparent !important; }
+
+/* 首页专用：让主卡吃掉剩余视口高度。
+   否则内容只有 ~640px，900px 屏幕下面空 260px，看上去像没做完。
+   用 :has(.cv) 把规则限定在首页，不影响其它页面。 */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]:has(.cv) {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]:has(.cv)
+  > [data-testid="stElementContainer"]:has(.cv) {
+  flex: 1 1 auto;
+}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]:has(.cv)
+  > [data-testid="stElementContainer"]:has(.cv) .cv {
+  height: 100%;
+}
 
 /* 入口文件必须叫 app.py（云端 Main file path 写死了这个路径），
    Streamlit 直接拿文件名当导航标题，于是侧边栏第一项显示成 "app"。
@@ -473,7 +520,9 @@ div[data-testid="stVerticalBlockBorderWrapper"],
   background: var(--tb-ink);
   height: 40px;
   padding: 0 clamp(12px, 1.9vw, 30px);
-  margin: 0 calc(-1 * clamp(12px, 1.9vw, 30px)) 16px;
+  /* 左右负 margin 抵消正文边距，让黑条通到窗口边缘；
+     纵向间距交给父级统一控制，这里不再自加 margin-bottom（会与父级叠加） */
+  margin: 0 calc(-1 * clamp(12px, 1.9vw, 30px));
 }
 .tb-topbar .left { display: flex; align-items: center; gap: 11px; }
 .tb-topbar .brand { font-size: 8px; letter-spacing: 0.26em; color: #F2F1EC; font-family: __MONO__; }
