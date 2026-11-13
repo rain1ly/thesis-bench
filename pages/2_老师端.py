@@ -37,8 +37,17 @@ components.hero(
 )
 
 if not actor.is_teacher:
-    st.info("当前是学生身份。老师端的待办与名单需要切到「老师」身份查看。")
-    st.page_link("pages/1_答疑台.py", label="回答疑台 →")
+    # 只提示"请切身份"会让第一次点进来的人愣一下：他知道要切，但还得去找侧边栏。
+    # 这里直接给一个按钮，一下到位 —— 演示时切身份本来就是常规动作。
+    st.info("这一页是老师视角。当前是学生身份，点下面的按钮就切过去。")
+    _c1, _c2 = st.columns([1, 2])
+    if _c1.button("切换为老师身份 →", type="primary", key="to_teacher"):
+        # 不能直接写 actor_role_widget：控件已经渲染过，写它会抛
+        # StreamlitAPIException（cannot be modified after ... instantiated）。
+        # 挂一个待切换标记，由 identity.render_switcher 在下一轮、控件创建前消费。
+        st.session_state["_actor_pending"] = ("老师", identity.teacher_names()[0])
+        st.rerun()
+    _c2.page_link("pages/1_答疑台.py", label="回答疑台 →")
     st.stop()
 
 records = qa_store.list_records()
@@ -61,17 +70,25 @@ with tab_todo:
     else:
         st.caption("排序：点名找你的在前，隐私问题优先于公开问题，同组内按提交时间倒序。")
         for r in inbox:
-            tags = []
-            tags.append("隐私" if r.is_private else "公开")
-            tags.append(r.category)
-            tags.append(f"点名 {actor.name}" if r.assigned_to else "公开池")
-            head = f"#{r.id} · {r.student} · {' · '.join(tags)} · {r.question[:26]}"
+            # 编号补零、字段用间隔点分开：和首页那张链条表同一个节奏。
+            # key 前缀决定左条颜色（tbx-priv- 红 / tbx-pub- 灰），
+            # 不用读「隐私」两个字，扫一眼左边就知道哪条得先处理。
+            kind = "priv" if r.is_private else "pub"
+            head = f"#{r.id:03d}　{r.student}　·　{r.category}　·　{r.question[:30]}"
 
-            with st.expander(head, expanded=len(inbox) == 1):
+            with st.expander(head, expanded=len(inbox) == 1, key=f"tbx-{kind}-{r.id}"):
                 thesis = r.thesis_title or qa_store.thesis_of(r.student)
+                components.meta_line(
+                    [
+                        "隐私" if r.is_private else "公开",
+                        f"点名 {actor.name}" if r.assigned_to else "公开池",
+                        r.stage,
+                        r.created_at,
+                        "AI 已起草" if r.ai_draft else "无草稿",
+                    ]
+                )
                 st.markdown(f"**论文题目**　{thesis or '（学生未填写）'}")
                 st.markdown(f"**学生问题**　{r.question}")
-                st.caption(f"{r.stage} · 提交于 {r.created_at}" + ("　·　AI 已起草" if r.ai_draft else "　·　无草稿"))
 
                 if r.ai_draft:
                     st.info(f"AI 草稿（仅供参考，可直接改）：\n\n{r.ai_draft}")
@@ -148,8 +165,16 @@ with tab_students:
 with tab_archive:
     counts = identity.category_counts(records)
     if counts:
-        st.markdown("**问题分类分布**")
-        st.bar_chart(pd.DataFrame({"条数": list(counts.values())}, index=list(counts.keys())), height=200)
+        components.section("问题分类分布", f"{len(counts)} 类 · 按条数排")
+        # 横向条形图而不是竖向柱状：分类名是 4 个汉字，竖排柱子的标签会被压成竖排文字，
+        # 读起来费劲。横向之后标签正常横排，长短一眼可比。
+        # color 必须指定 —— 不指定就是 Streamlit 主题蓝，在一张纸底黑框的页面上格外跳。
+        st.bar_chart(
+            pd.DataFrame({"条数": list(counts.values())}, index=list(counts.keys())),
+            height=220,
+            horizontal=True,
+            color="#111111",
+        )
         st.caption("分类是学生提问时自选的。哪类多，下学期的开题指导就该往那补 —— 这是导师能拿走的结论。")
 
     done = [r for r in records if r.answered]

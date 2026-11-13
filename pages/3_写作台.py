@@ -52,10 +52,10 @@ components.kpi([
     ("检出问题", stat["total"], f"{stat['severe']} 项严重", "high" if stat["severe"] else "good"),
 ])
 
-st.divider()
+components.divider_gap()
 
 if issues:
-    st.subheader("问题清单")
+    components.section("问题清单", f"{stat['total']} 项 · 其中 {stat['severe']} 项严重")
     df = pd.DataFrame(
         [
             {
@@ -73,14 +73,15 @@ else:
     st.success("没有发现结构性问题。")
 
 if profile.sections:
-    st.subheader("章节字数分布")
+    components.section("章节字数分布", f"{len(profile.sections)} 个小节 · 结构失衡一眼可见")
     chart_df = pd.DataFrame(
         {"字数": [s.char_count for s in profile.sections]},
         index=[f"{s.number} {s.title[:10]}" for s in profile.sections],
     )
-    st.bar_chart(chart_df, height=300)
+    # 默认蓝色是 Streamlit 的色，会把整套纸底黑框的调子拉散 —— 指定成墨黑
+    st.bar_chart(chart_df, height=300, color="#111111")
 
-    with st.expander("章节明细"):
+    with st.expander("章节明细", key="tbx-sections"):
         detail = pd.DataFrame(
             [
                 {
@@ -93,6 +94,4 @@ if profile.sections:
             ]
         )
         st.dataframe(detail, width="stretch", hide_index=True)
-
-st.divider()
 st.caption(f"文件：{profile.filename}　|　检查项：文献引用、图表悬空、章节结构、标题承诺")

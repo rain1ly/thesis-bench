@@ -76,7 +76,7 @@ _pf = st.session_state.pop("prof_flash", None)
 if _pf:
     st.success(_pf)
 
-with st.container(border=True):
+with st.container(border=True, key="tb-profile"):
     c1, c2 = st.columns([2, 1])
     c1.markdown(f"**论文题目**　{thesis or '（还没填，老师看不到你的题目）'}")
     c2.caption(f"指导老师　{advisor or '未分配'}")
@@ -244,23 +244,27 @@ with tab_mine:
                 st.rerun()
     else:
         done = sum(1 for r in rows if r.answered)
-        m1, m2, m3 = st.columns(3)
-        m1.metric("提问总数", len(rows))
-        m2.metric("已答复", done)
-        m3.metric("还在等", len(rows) - done)
+        components.kpi([
+            ("提问总数", len(rows), "我的全部记录", "default"),
+            ("已答复", done, "老师已审核入库", "good" if done else "default"),
+            ("还在等", len(rows) - done, "尚未入库", "mid" if len(rows) - done else "default"),
+        ])
 
         for r in rows[:20]:
-            icon = "隐私" if r.is_private else "公开"
-            with st.expander(f"#{r.id} · {r.category} · {icon} · {r.question[:30]}"):
+            # 左条：已答复灰、待答复黑 —— 不读「状态：已通过」也知道哪条还在等
+            state = "done" if r.answered else "wait"
+            with st.expander(
+                f"#{r.id:03d}　{r.category}　·　{'隐私' if r.is_private else '公开'}　·　{r.question[:30]}",
+                key=f"tbx-{state}-{r.id}",
+            ):
+                components.meta_line([r.stage, r.audience, r.created_at, r.status])
                 st.markdown(f"**问题**　{r.question}")
-                st.caption(f"{r.stage} · {r.audience} · 提交于 {r.created_at}")
                 if r.final_answer:
                     st.markdown(f"**答复**　{r.final_answer}")
                     if r.reviewer_note:
                         st.caption(f"老师备注：{r.reviewer_note}")
                 else:
                     st.warning("还没有答复。")
-                st.caption(f"状态：{r.status}")
 
 # ------------------------------------------------------------------ 公开问答
 with tab_open:

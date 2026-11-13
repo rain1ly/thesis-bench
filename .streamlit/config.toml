@@ -1,6 +1,6 @@
 # Streamlit 运行配置 —— 本地与云端共用
 # 注意：这里的颜色必须和 ui/theme.py 的 COLORS 保持一致。
-# 两处不一致时，Streamlit 内置组件（滑块、单选、进度）会用自己的主题色，
+# 两处不一致时，Streamlit 内置组件（下拉、单选、进度条）会用自己的主题色，
 # 自定义组件用 CSS 的色 —— 同一个页面上出现两种色，一眼就看得出是拼的。
 
 [theme]
@@ -10,6 +10,14 @@ backgroundColor = "#F2F1EC"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#111111"
 font = "sans serif"
+
+# 下面三项是 1.66 才有的主题参数，比用 CSS 逐个覆盖稳：
+# 选择器会随前端重构失效（这次就踩了 baseweb 被移除），主题参数不会。
+# 整套设计是"零圆角 + 黑框"，从根上设直角，控件就不必逐个补 border-radius: 0。
+borderColor = "#111111"
+baseRadius = "0rem"
+showWidgetBorder = true
+baseFontSize = 15
 
 [client]
 toolbarMode = "minimal"

@@ -6,9 +6,18 @@
 import streamlit as st
 
 from core.ai_client import load_config, ping
+from datetime import date
 
-st.title("环境自检")
-st.caption("检查模型密钥配置与实际连通性。本页不发业务请求，只做一次 8 token 的探测。")
+from ui import components, theme
+
+theme.inject()
+
+components.topbar(page="SYS / 自检", date=date.today().strftime("%Y.%m.%d"))
+components.hero(
+    "环境自检",
+    "密钥到底通没通",
+    "检查模型密钥配置与实际连通性。本页不发业务请求，只做一次 8 token 的探测 —— 演示前点一次，心里有底。",
+)
 
 config = load_config()
 

@@ -141,17 +141,19 @@ with tab_plan:
         for idx, item in enumerate(plan["items"], start=1):
             q = item.question
             prev = latest.get(q.text)
-            badge = "已预演" if prev else "未预演"
-            head = f"{idx}. 【风险 {item.priority} · {q.topic}】{q.text[:32]}　·　{badge}"
+            # 编号补零、级别用方角块：和首页那张表的节奏一致。
+            # key 前缀决定左条颜色 —— 未预演的题要显眼，已答过的退后。
+            state = "done" if prev else "todo"
+            head = f"{idx:02d}　【风险 {item.priority} · {q.topic}】{q.text[:32]}　·　{'已预演' if prev else '未预演'}"
 
-            with st.expander(head, expanded=(not prev and idx == 1)):
+            with st.expander(head, expanded=(not prev and idx == 1), key=f"tbx-{state}-{idx}"):
                 st.markdown(f"**{q.text}**")
+                components.meta_line([f"风险 {item.priority}", q.topic, "已预演" if prev else "未预演"])
                 st.caption(f"评委为什么问这个：{q.why}")
                 for r in item.reasons:
                     st.caption(f"· 为什么挑这道：{r}")
 
                 if prev:
-                    st.divider()
                     c1, c2 = st.columns([1, 3])
                     c1.markdown(f"**最近一次：{prev.level}**")
                     c2.markdown(f"要点覆盖 **{prev.hit}/{prev.total}**　·　{prev.created_at}")

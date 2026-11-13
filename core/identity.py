@@ -158,6 +158,15 @@ def render_switcher() -> Actor:
     role_key = "actor_role_widget"
     name_key = "actor_name_widget"
 
+    # 其他页面可以请求切换身份（比如老师端的「切换为老师身份」按钮）。
+    # 关键：控件一旦创建，它的 key 就不能再被写 ——
+    # 直接改 st.session_state["actor_role_widget"] 会抛
+    # StreamlitAPIException: cannot be modified after the widget ... is instantiated。
+    # 所以这里用「挂起标记」，在本函数里、控件创建**之前**消费掉。
+    pending = st.session_state.pop("_actor_pending", None)
+    if pending:
+        st.session_state[role_key], st.session_state[name_key] = pending
+
     with st.sidebar:
         st.divider()
         st.caption("当前身份")
