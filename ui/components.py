@@ -87,17 +87,55 @@ def anchor(key: str) -> None:
     st.markdown(f'<span id="{_esc(key)}" class="tb-anchor"></span>', unsafe_allow_html=True)
 
 
-def section_head(no: str, title: str, en: str, desc: str) -> None:
-    """区块标头：编号 + 英文小标 + 大标题 + 一句说明。
+def _highlight(text: str) -> str:
+    """把 `[[关键词]]` 转成荧光笔标记，其余部分转义。
 
-    比 hero 紧凑一档 —— 单页里每个区块都有标头，太大会把一屏占满。
+    为什么用标记而不是传 HTML：section_head 是"内容函数"，
+    允许调用方塞原始 HTML 就等于把转义责任推出去，
+    迟早有人把学生原话（可能带尖括号）直接拼进来。
+    这里只认一种标记，解析完统一转义，安全边界是清楚的。
+    """
+    out: list[str] = []
+    for i, seg in enumerate(str(text).split("[[")):
+        if i == 0:
+            out.append(_esc(seg))
+            continue
+        head, sep, tail = seg.partition("]]")
+        if sep:
+            out.append(f'<em class="sh-hl">{_esc(head)}</em>{_esc(tail)}')
+        else:
+            # 只有左括号没有右括号：原样显示，不要让排版吃掉用户的字
+            out.append(_esc("[[" + seg))
+    return "".join(out)
+
+
+def section_head(no: str, title: str, en: str, desc: str, meta: str = "") -> None:
+    """区块标头：竖切一刀的"章节扉页"。
+
+    与首页主卡同一套语言：顶部 2px 黑线 → 红编号 + 宽字距英文 + 右上天元数据
+    → 超粗大标题（可带荧光笔）→ 1px 细线 → 说明。
+
+    **为什么不是卡片**：卡片会把下面的表单挤成"卡片外的东西"；
+    这条扉页是一条横切的带，天然是章节开头，往后接什么都成立。
+
+    `no` 允许写成 "02 / 答疑台"，会拆成编号与中文名 —— 调用方只传一个字符串，
+    不用为了排版把业务标签拆开传。
     """
     import streamlit as st
 
+    num, _, name = str(no).partition(" / ")
+    name = name or num
+    meta_html = f'<span class="sh-meta">{_esc(meta)}</span>' if meta else ""
     st.markdown(
         f"""<div class="tb-sechead">
-  <div class="sh-top"><span class="sh-no">{_esc(no)}</span><span class="sh-en">{_esc(en)}</span></div>
-  <h2 class="sh-title">{title}</h2>
+  <div class="sh-top">
+    <span class="sh-no">{_esc(num)}</span>
+    <span class="sh-name">{_esc(name)}</span>
+    <span class="sh-en">{_esc(en)}</span>
+    {meta_html}
+  </div>
+  <h2 class="sh-title">{_highlight(title)}</h2>
+  <div class="sh-rule"></div>
   <p class="sh-desc">{_esc(desc)}</p>
 </div>""",
         unsafe_allow_html=True,
@@ -279,6 +317,49 @@ def empty(title: str, hint: str) -> None:
     st.markdown(
         f'<div class="tb-empty"><div class="e-title">{_esc(title)}</div>'
         f'<div class="e-hint">{hint}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def check_grid(items: list[tuple[str, str, str, str, str]]) -> None:
+    """四栏规则说明卡：编号 + 中文名 + 英文 + 查什么 + 交付什么。
+
+    用途是填"空状态"：写作台没上传文件时，这一屏不能只有上传框。
+    但它同时承担说明职责 —— 读者看完这四栏就知道点下去会得到什么，
+    不需要先试一遍。
+
+    items = [(编号, 中文名, 英文, 查什么, 产出)]。四栏是设计稿的固定列数，
+    多传或少于 4 条都会让版面塌掉，所以这里不做好看的自适应。
+    """
+    import streamlit as st
+
+    cells = []
+    for no, name, en, what, deliver in items:
+        cells.append(
+            f"""<div class="tb-check">
+  <div class="c-top"><span class="c-no">{_esc(no)}</span><span class="c-en">{_esc(en)}</span></div>
+  <div class="c-name">{_esc(name)}</div>
+  <div class="c-what">{_esc(what)}</div>
+  <div class="c-deliver">{_esc(deliver)}</div>
+</div>"""
+        )
+    st.markdown(f'<div class="tb-checkgrid">{"".join(cells)}</div>', unsafe_allow_html=True)
+
+
+def section_foot(no: str, nxt: str = "") -> None:
+    """区块尾栏：一条黑线 + 编号 + 下一段指引，压在这一屏的底部。
+
+    作用是把"一屏一区"的底部留白收掉 —— 内容少的区块（比如写作台空状态）
+    底下会空出两三百像素，看起来像没加载完；有了这条线，空白变成"留白"。
+
+    同时它承担滚动引导：写完一段明确告诉你下一段是什么，
+    比让人自己猜"下面还有没有东西"好。
+    """
+    import streamlit as st
+
+    nxt_html = f'<span class="sf-next">↓ {_esc(nxt)}</span>' if nxt else ""
+    st.markdown(
+        f'<div class="tb-secfoot"><span class="sf-no">{_esc(no)}</span>{nxt_html}</div>',
         unsafe_allow_html=True,
     )
 

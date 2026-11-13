@@ -266,15 +266,42 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
   flex-direction: column;
   padding-bottom: clamp(18px, 3vh, 40px);
 }
+/* 让 section 内部的 vertical block 也撑满，尾栏的 margin-top:auto 才有"底"可压。
+   不设这一条，尾栏会紧贴内容，底部那片空白仍在。 */
+[class*="st-key-sec-"] > div > div[data-testid="stVerticalBlock"],
+[class*="st-key-sec-"] > div[data-testid="stVerticalBlock"] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+/* 用 :has 定位"装着尾栏的那个 element container"，不去数层级 ——
+   Streamlit 每版都可能多包一层 div，数层级的选择器一旦错就是静默失效。 */
+[class*="st-key-sec-"] [data-testid="stElementContainer"]:has(.tb-secfoot) {
+  margin-top: auto;
+}
 
 /* ── 区块标头（单页每个 section 一个）─────────────────── */
-.tb-sechead { margin: 0 0 clamp(10px, 1.4vw, 18px); }
-.sh-top { display: flex; align-items: baseline; gap: 10px; }
+/* ── 区块扉页（每个 section 的开口）────────────────────── */
+/* 与首页主卡同一套语言：2px 黑顶线开口、红编号、宽字距英文、
+   超粗标题 + 荧光笔、1px 细线切一刀、说明压在下半。
+   标题字号只到首页的六成 —— 首页是封面，这里是章节，抢戏会让下面表单无处落脚。 */
+.tb-sechead {
+  margin: 0 0 clamp(14px, 1.9vw, 26px);
+  border-top: 2px solid var(--tb-ink);
+  padding-top: clamp(8px, 0.9vw, 12px);
+}
+.sh-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .sh-no {
   font-family: __MONO__;
   font-size: clamp(9px, 0.8vw, 11px);
   letter-spacing: 0.16em;
   color: var(--tb-red);
+}
+.sh-name {
+  font-size: clamp(10px, 0.85vw, 12px);
+  letter-spacing: 0.24em;
+  color: var(--tb-ink);
+  font-weight: 500;
 }
 .sh-en {
   font-family: __MONO__;
@@ -283,19 +310,143 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
   color: var(--tb-ink-3);
   text-transform: uppercase;
 }
+/* 右上天元数据：不需要靠左的"NO./SCOPE"，内页只放一条状态串 */
+.sh-meta {
+  margin-left: auto;
+  font-family: __MONO__;
+  font-size: clamp(7px, 0.6vw, 8.5px);
+  letter-spacing: 0.16em;
+  color: var(--tb-ink-3);
+  white-space: nowrap;
+}
 .sh-title {
-  font-size: clamp(22px, 2.6vw, 36px) !important;
+  font-family: __HEAVY__;
+  font-size: clamp(26px, 3.4vw, 48px) !important;
   font-weight: 900 !important;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  margin: 6px 0 0 !important;
+  letter-spacing: -0.032em;
+  line-height: 1.06;
+  margin: clamp(8px, 1vw, 14px) 0 0 !important;
+  color: var(--tb-ink) !important;
+  /* 微软雅黑最粗只到 700，单靠 weight 到不了首页那种分量 */
+  -webkit-text-stroke: 0.3px var(--tb-ink);
+}
+/* 荧光笔：与首页 .cv-sub .hl 同一套参数，只是字号小一档。
+   isolation 不能省 —— 白底上 z-index:-1 会跑到背景后面直接看不见。 */
+.sh-title .sh-hl {
+  position: relative;
+  isolation: isolate;
+  font-style: normal;
+  color: var(--tb-ink);
+  padding: 0 .08em;
+}
+.sh-title .sh-hl::before {
+  content: "";
+  position: absolute;
+  left: -.06em;
+  right: -.06em;
+  bottom: .24em;
+  height: .46em;
+  background: #F5E027;
+  z-index: -1;
+}
+.sh-rule {
+  height: 1px;
+  background: var(--tb-ink);
+  margin: clamp(10px, 1.2vw, 16px) 0 clamp(7px, 0.8vw, 10px);
+  opacity: .85;
 }
 .sh-desc {
   font-size: clamp(11.5px, 0.95vw, 13.5px) !important;
   color: var(--tb-ink-2) !important;
-  line-height: 1.7 !important;
-  margin: 6px 0 0 !important;
-  max-width: 62ch;
+  line-height: 1.75 !important;
+  margin: 0 !important;
+  max-width: 68ch;
+}
+
+/* ── 区块尾栏 ───────────────────────────────────────────── */
+.tb-secfoot {
+  border-top: 1.5px solid var(--tb-ink);
+  padding-top: clamp(9px, 1.1vw, 13px);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: __MONO__;
+  font-size: clamp(7px, 0.6vw, 8.5px);
+  letter-spacing: 0.18em;
+  color: var(--tb-ink-3);
+}
+.tb-secfoot .sf-no { color: var(--tb-ink-2); }
+.tb-secfoot .sf-next { color: var(--tb-red); }
+
+/* ── 规则说明网格（写作台空状态）───────────────────────
+   四栏固定：这是设计稿的列数，也是"四类检查"的事实。
+   做成自适应列数会把四类挤成三栏，读者以为是三条规则。 */
+.tb-checkgrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 1vw, 14px);
+  margin-top: clamp(10px, 1.2vw, 16px);
+}
+.tb-check {
+  position: relative;
+  background: var(--tb-surface);
+  border: 1.5px solid var(--tb-ink);
+  padding: 12px 13px 11px;
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(150px, 17vh, 190px);
+  /* 切角 14px：比卡片小一档 —— 它是"子卡"，切角和层级成正比 */
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+.tb-check::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 19.8px;
+  height: 0;
+  border-top: 1.5px solid var(--tb-ink);
+  transform-origin: top right;
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+.tb-check .c-top { display: flex; justify-content: space-between; align-items: baseline; }
+.tb-check .c-no {
+  font-family: __MONO__;
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  color: var(--tb-red);
+}
+.tb-check .c-en {
+  font-family: __MONO__;
+  font-size: 6.8px;
+  letter-spacing: 0.16em;
+  color: var(--tb-ink-3);
+}
+.tb-check .c-name {
+  font-size: clamp(13px, 1.15vw, 15px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 7px;
+}
+.tb-check .c-what {
+  font-size: clamp(10.5px, 0.86vw, 11.5px);
+  line-height: 1.65;
+  color: var(--tb-ink-2);
+  margin-top: 5px;
+  flex: 1;
+}
+.tb-check .c-deliver {
+  font-family: __MONO__;
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--tb-ink-3);
+  border-top: 1px solid var(--tb-line);
+  padding-top: 7px;
+  margin-top: 9px;
+}
+@media (max-width: 900px) {
+  .tb-checkgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* 入口文件必须叫 app.py（云端 Main file path 写死了这个路径），
@@ -383,7 +534,9 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
 /* ── 输入控件 ───────────────────────────────────────────── */
 .stTextInput input, .stTextArea textarea, .stNumberInput input {
   border-radius: 0 !important;
-  border: 1px solid var(--tb-line) !important;
+  /* 1.5px 而不是 2px：卡片是 2px 黑框，输入框如果同宽，
+     一屏里全是等粗的黑线，眼睛找不到落点。轻半档刚好"是控件不是容器"。 */
+  border: 1.5px solid var(--tb-ink) !important;
   background: var(--tb-surface) !important;
   font-size: __BODY__px !important;
   color: var(--tb-ink) !important;
@@ -398,8 +551,11 @@ hr { border-color: var(--tb-line); margin: 1.4rem 0; }
 [data-testid="stSelectbox"] div:has(> input),
 [data-testid="stMultiSelect"] div:has(> input) {
   border-radius: 0 !important;
-  border-color: var(--tb-line) !important;
+  /* 和输入框统一成 1.5px 黑边。原来这里是浅灰 1px，
+     一屏里出现"黑框卡片 + 灰框下拉"，控件像不属于这套设计。 */
+  border: 1.5px solid var(--tb-ink) !important;
   background: var(--tb-surface) !important;
+  box-shadow: none !important;
 }
 [data-testid="stSelectbox"] input,
 [data-testid="stMultiSelect"] input {
@@ -435,26 +591,93 @@ div[data-testid="stVerticalBlockBorderWrapper"],
 }
 
 /* ── 折叠面板 ───────────────────────────────────────────── */
-[data-testid="stExpander"] {
-  border: 1px solid var(--tb-line) !important;
-  border-radius: 0 !important;
-  background: var(--tb-surface);
-}
-/* 带 key 的折叠面板（老师端待办等）：统一黑框 + 状态左条。
-   左条颜色由 key 前缀决定，见上面 tb-priv / tb-pub 那段注释。 */
-[class*="st-key-tbx-"] {
+/* ── 普通卡片：与首页主卡同构（黑框 + 右上切角 + 斜线）────────
+   只给 "card-" 前缀的容器加，section 外层（sec-*）不能加 ——
+   那会把整段内容裁掉一块。 */
+[class*="st-key-card-"] {
+  position: relative;
   border: 2px solid var(--tb-ink) !important;
   border-radius: 0 !important;
   background: var(--tb-surface) !important;
-  overflow: hidden;
+  padding: 14px 16px !important;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
 }
-[class*="st-key-tbx-priv-"] { border-left: 5px solid var(--tb-red) !important; }
-[class*="st-key-tbx-pub-"]  { border-left: 5px solid var(--tb-line) !important; }
-/* 预演台题单：未预演的需要显眼，已答过的退后 */
-[class*="st-key-tbx-todo-"] { border-left: 5px solid var(--tb-ink) !important; }
-[class*="st-key-tbx-done-"] { border-left: 5px solid var(--tb-line) !important; }
-/* 学生的「我的问题」：还在等答复的用黑条，已入库的退后 */
-[class*="st-key-tbx-wait-"] { border-left: 5px solid var(--tb-ink) !important; }
+/* 卡片内元素间距收紧与 tb- 卡片一致 */
+[class*="st-key-card-"] > div > div[data-testid="stVerticalBlock"] { gap: .45rem; }
+/* 斜线补切角：clip-path 连 border 一起裁，切角处只剩一条直边。
+   top 必须补 border-width：absolute 的 top 从 padding box 起算，
+   而 clip-path 从 border box 切，两者恒差 2px。 */
+[class*="st-key-card-"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 31.1px;              /* 22 × √2 */
+  height: 0;
+  border-top: 2px solid var(--tb-ink);
+  transform-origin: top right;
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+
+/* ── 折叠面板 ───────────────────────────────────────────────
+   **边框统一由 <details> 承担，其它层一律不加框。**
+
+   这是踩了三次才摸清的层级（Streamlit 1.66）：
+     stLayoutWrapper (st-key-tbx-*)   ← 以前给这层加 2px 框
+       └─ [data-testid=stExpander]    ← 以前也给这层加 1.5px 框（其实无效）
+           └─ <details>               ← Streamlit 自带的 1px 可见框在这里
+   三层各加一道框，条目就变成"框里套框"的双层/三层卡。
+   现在全部收敛到 details：普通面板 1.5px 黑框，带状态条的加粗左边，
+   队列框内的完全去框、只留细线分隔。 */
+[data-testid="stExpander"] details {
+  border: 1.5px solid var(--tb-ink) !important;
+  border-radius: 0 !important;
+  background: var(--tb-surface) !important;
+}
+/* 状态左条：带 tbx key 的独立卡片（学生端「我的问题」、预演台题单等）。
+   颜色由 key 前缀决定，扫一眼左边就知道状态。 */
+[class*="st-key-tbx-"] [data-testid="stExpander"] details {
+  border-left: 5px solid var(--tb-ink) !important;
+}
+[class*="st-key-tbx-priv-"] [data-testid="stExpander"] details { border-left-color: var(--tb-red) !important; }
+[class*="st-key-tbx-pub-"]  [data-testid="stExpander"] details { border-left-color: var(--tb-line) !important; }
+[class*="st-key-tbx-todo-"] [data-testid="stExpander"] details { border-left-color: var(--tb-ink) !important; }
+[class*="st-key-tbx-done-"] [data-testid="stExpander"] details { border-left-color: var(--tb-line) !important; }
+[class*="st-key-tbx-wait-"] [data-testid="stExpander"] details { border-left-color: var(--tb-ink) !important; }
+
+/* 待办 = 一个队列框（card-todo）+ 内部细线分行，与首页 PENDING QUEUE 同构。 */
+/* 队列内部靠细线分隔，不靠间距。gap 必须归零 —— 1.66 用 flex gap 排布，
+   设 margin-bottom 毫无作用（实测过，改了没反应）。 */
+[class*="st-key-card-todo"] > div > div[data-testid="stVerticalBlock"],
+[class*="st-key-card-todo"] > div[data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+}
+/* 队列内每个条目：去掉完整边框，只留底部细线 + 状态左条 */
+[class*="st-key-card-todo"] [data-testid="stExpander"] details {
+  border: none !important;
+  border-bottom: 1px solid var(--tb-line) !important;
+  border-left: 5px solid var(--tb-ink) !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+[class*="st-key-card-todo"] [class*="st-key-tbx-priv-"] [data-testid="stExpander"] details {
+  border-left-color: var(--tb-red) !important;
+}
+[class*="st-key-card-todo"] [class*="st-key-tbx-pub-"] [data-testid="stExpander"] details {
+  border-left-color: var(--tb-line) !important;
+}
+[class*="st-key-card-todo"] [class*="st-key-tbx-"] { margin-bottom: 0 !important; }
+[class*="st-key-card-todo"] [class*="st-key-tbx-"]:last-child details { border-bottom: none !important; }
+/* 一行标题不该占 46px */
+[class*="st-key-card-todo"] [data-testid="stExpander"] summary {
+  padding: .4rem .85rem !important;
+  min-height: 0 !important;
+}
+[class*="st-key-card-todo"] [data-testid="stExpander"] summary p {
+  font-size: 11.5px !important;
+  line-height: 1.5 !important;
+}
 [data-testid="stExpander"] summary {
   font-size: 12.5px;
   font-weight: 700;
@@ -567,10 +790,15 @@ div[data-testid="stVerticalBlockBorderWrapper"],
 [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"],
 [data-testid="stFileUploaderDropzone"] {
   background: var(--tb-surface) !important;
-  border: 1px dashed var(--tb-line) !important;
+  /* 实线而不是虚线：全站没有第二处虚线，这里孤立一跳；
+     拖放语义交给「Upload」按钮和 50MB 那行说明，不靠线型 */
+  border: 1.5px solid var(--tb-ink) !important;
   border-radius: 0 !important;
 }
-[data-testid="stFileUploaderDropzone"]:hover { border-color: var(--tb-ink) !important; }
+[data-testid="stFileUploaderDropzone"]:hover {
+  border-color: var(--tb-ink) !important;
+  background: #FAF9F4 !important;
+}
 
 /* ── 页面链接 ───────────────────────────────────────────── */
 [data-testid="stPageLink"] a {
@@ -780,6 +1008,20 @@ div[data-testid="stVerticalBlockBorderWrapper"],
   padding: 13px 14px 11px;
   position: relative;
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+/* 斜线补切角：线绕右上角旋转 -45°，两端正好落在切角的两个端点。
+   长度 = 14 × √2 ≈ 19.8px。 */
+.tb-kpi::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 19.8px;
+  height: 0;
+  border-top: 1.5px solid var(--tb-ink);
+  transform-origin: top right;
+  transform: rotate(-45deg);
+  pointer-events: none;
 }
 .tb-kpi .k-top { display: flex; justify-content: space-between; align-items: baseline; }
 .tb-kpi .k-label {

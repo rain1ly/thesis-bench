@@ -79,11 +79,13 @@ def qa_section(actor) -> None:
     components.anchor("qa")
     with st.container(key="sec-qa"):
         try:
+            _qs = qa_store.stats()
             components.section_head(
                 "02 / 答疑台",
-                "把问题问清楚，也把答案留下来",
+                "把问题问清楚，也把答案[[留下来]]",
                 "QA System",
                 "提问时先定三件事：属于哪类问题、交给哪位老师、给谁看。AI 起草，老师改完才入库。",
+                meta=f"REC {_qs['total']:02d} ／ PEND {_qs['待审核']:02d}",
             )
             if actor.is_teacher:
                 _teacher_view(actor)
@@ -91,6 +93,7 @@ def qa_section(actor) -> None:
                 _student_view(actor)
         except Exception as exc:  # noqa: BLE001 - 单页里一处崩不能拖垮后面
             st.error(f"答疑台这一段出错：{type(exc).__name__} — {exc}")
+        components.section_foot("02 / 答疑台", "03 写作台")
 
 
 def _student_view(actor) -> None:
@@ -102,7 +105,7 @@ def _student_view(actor) -> None:
     if _pf:
         st.success(_pf)
 
-    with st.container(border=True, key="tb-profile"):
+    with st.container(border=True, key="card-profile"):
         c1, c2 = st.columns([2, 1])
         c1.markdown(f"**论文题目**　{thesis or '（还没填，老师看不到你的题目）'}")
         c2.caption(f"指导老师　{advisor or '未分配'}")
@@ -146,7 +149,11 @@ def _student_view(actor) -> None:
         stage = c1.selectbox("所处阶段", STAGES, key="q_stage")
         category = c2.selectbox("问题分类", CATEGORIES, key="q_cat")
 
-        visibility = st.radio(
+        # 可见性与答疑老师并排：它们本来就是同一件事的两面（给谁看 / 谁受理），
+        # 竖着排会让右侧空出 60% 宽度，一屏一区的版式下那片空白很扎眼。
+        c3, c4 = st.columns([1, 1.55], gap="medium")
+
+        visibility = c3.radio(
             "可见性",
             ["公开", "隐私"],
             horizontal=True,
@@ -160,7 +167,7 @@ def _student_view(actor) -> None:
         route_options.append("指定其他老师")
         if visibility == "公开":
             route_options.append("公开给所有老师")
-        route = st.radio(
+        route = c4.radio(
             "答疑老师",
             route_options,
             key=f"q_route_{visibility}",
@@ -177,7 +184,9 @@ def _student_view(actor) -> None:
         question = st.text_area(
             "你的问题",
             key="q_text",
-            height=110,
+            # 92 而不是 110：整段高度 817px 比一屏(804)多 13px，
+            # 尾栏会被挤出视口。压到 92 刚好收回来，三行字也够写一句问题。
+            height=92,
             placeholder="例如：我的问卷只回收了 62 份，够不够做因子分析？",
         )
 
@@ -336,13 +345,16 @@ def _teacher_view(actor) -> None:
             st.success("没有待处理的问题。")
         else:
             st.caption("排序：点名找你的在前，隐私优先于公开，同组内按提交时间倒序。")
+            # 三条待办包进一个队列框：Visual 上要和首页右下角那个 PENDING QUEUE 同构
+            # （一个黑框 + 内部细线分隔），否则三个独立 expander 读成"三张并列卡片"。
+            todo_box = st.container(key="card-todo")
             for r in inbox:
                 # 左条颜色由 key 前缀决定（tbx-priv- 红 / tbx-pub- 灰）：
                 # 不用读「隐私」两个字，扫一眼左边就知道哪条得先处理
                 kind = "priv" if r.is_private else "pub"
                 head = f"#{r.id:03d}　{r.student}　·　{r.category}　·　{r.question[:30]}"
 
-                with st.expander(head, expanded=len(inbox) == 1, key=f"tbx-{kind}-{r.id}"):
+                with todo_box, st.expander(head, expanded=len(inbox) == 1, key=f"tbx-{kind}-{r.id}"):
                     thesis = r.thesis_title or qa_store.thesis_of(r.student)
                     components.meta_line(
                         [
@@ -449,13 +461,15 @@ def writing_section(actor) -> None:
         try:
             components.section_head(
                 "03 / 写作台",
-                "先按评委的标准挑一遍毛病",
+                "先按评委的标准[[挑一遍毛病]]",
                 "Structure Check",
                 "四类确定性检查：文献双向引用、图表悬空、章节结构、标题承诺。同一份文档永远得到同一份清单，不调模型。",
+                meta="4 RULES ／ DOCX",
             )
             _writing_body()
         except Exception as exc:  # noqa: BLE001
             st.error(f"写作台这一段出错：{type(exc).__name__} — {exc}")
+        components.section_foot("03 / 写作台", "04 预演台")
 
 
 def _writing_body() -> None:
@@ -465,6 +479,17 @@ def _writing_body() -> None:
 
     if uploaded is None:
         st.info("还没有上传文件。可以先用 `data/samples/` 里那两份样本试试，它们的问题足够典型。")
+        # 空状态必须"自解释"：一屏一区的版式下，如果这里只放一个上传框，
+        # 剩下 600px 全是空白，看起来像页面没加载完。
+        # 这四栏本身也是说明——评委不用点任何按钮就知道"它查什么"。
+        components.check_grid(
+            [
+                ("01", "文献双向引用", "REFERENCE", "正文引了 [1] 但参考文献里没有，或者列了却没在正文引用。", "每条引用都能对上"),
+                ("02", "图表悬空", "FIGURE", "写了「如图 3 所示」，但全文找不到图 3；或图片没有编号。", "图号与正文一一对应"),
+                ("03", "章节结构", "STRUCTURE", "某章只有两三百字，或某一节字数占比异常，答辩时最容易被追问。", "各章篇幅不塌陷"),
+                ("04", "标题承诺", "PROMISE", "标题写了「实验与分析」，下面却没有实验数据 —— 承诺没交付。", "标题与内容对得上"),
+            ]
+        )
         return
 
     uploaded.seek(0)
@@ -541,15 +566,18 @@ def rehearsal_section(actor) -> None:
     components.anchor("rehearsal")
     with st.container(key="sec-rehearsal"):
         try:
+            _rs = rehearsal_store.stats()
             components.section_head(
                 "04 / 预演台",
-                "答辩前，先用自己问过的问题考一遍自己",
+                "答辩前，先用自己问过的问题[[考一遍自己]]",
                 "Rehearsal",
                 "出题依据是答疑记录，不是通用题库。只报要点覆盖、不打分；答题前不给要点 —— 那是答案。",
+                meta=f"Q {_rs['questions']:02d} ／ COVER {_rs['coverage']:.0%}" if _rs["points_total"] else f"Q {_rs['questions']:02d} ／ 未预演",
             )
             _rehearsal_body(actor)
         except Exception as exc:  # noqa: BLE001
             st.error(f"预演台这一段出错：{type(exc).__name__} — {exc}")
+        components.section_foot("04 / 预演台", "")
 
 
 def _rehearsal_body(actor) -> None:
