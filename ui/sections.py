@@ -566,7 +566,8 @@ def rehearsal_section(actor) -> None:
     components.anchor("rehearsal")
     with st.container(key="sec-rehearsal"):
         try:
-            _rs = rehearsal_store.stats()
+            # 标头右上角统计跟着身份走：老师看全体预演情况，学生看自己的。
+            _rs = rehearsal_store.stats(student=None if actor.is_teacher else actor.name)
             components.section_head(
                 "04 / 预演台",
                 "答辩前，先用自己问过的问题[[考一遍自己]]",
@@ -582,17 +583,30 @@ def rehearsal_section(actor) -> None:
 
 def _rehearsal_body(actor) -> None:
     all_records = qa_store.list_records()
-    students = [name for name, _score in rehearsal.student_risk(all_records)]
-    if not students:
-        st.info("还没有答疑记录，出不了题。先去「答疑台」录入几条，或在那边的记录页载入示例数据。")
-        return
 
-    student = st.selectbox(
-        "选择学生",
-        students,
-        key="reh_student",
-        help="按「最该练」排序：取该生风险最高的主题打分为序，不是按姓名排",
-    )
+    if actor.is_teacher:
+        # 老师视角：保留「选择学生」，可以查看任意学生的预演情况。
+        students = [name for name, _score in rehearsal.student_risk(all_records)]
+        if not students:
+            st.info("还没有答疑记录，出不了题。先去「答疑台」录入几条，或在那边的记录页载入示例数据。")
+            return
+        student = st.selectbox(
+            "选择学生",
+            students,
+            key="reh_student",
+            help="按「最该练」排序：取该生风险最高的主题打分为序，不是按姓名排",
+        )
+    else:
+        # 学生视角：没有「选择学生」——你只能预演自己的答辩。
+        # 数据全部跟随右上角身份：切个身份，这四张卡和画像就换成那个人。
+        student = actor.name
+        if not qa_store.list_records(student=student):
+            components.empty(
+                "你还没有答疑记录",
+                "预演台按你的答疑史出题 —— 先去上方「答疑台」提几个问题，"
+                "这里才能生成你的预演题单。",
+            )
+            return
 
     records = qa_store.list_records(student=student)
     profile = rehearsal.build_profile(records)
